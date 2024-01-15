@@ -7,7 +7,7 @@ import time
 from alog import info, debug, error, started, stopped, exited
 import asyncio
 from device import Device
-from hass import BinarySensor
+from hass import ha_setup
 
 class Tray:
 	def __init__(self, name, pin=13, invert=True ):
@@ -16,7 +16,7 @@ class Tray:
 		self.invert = invert
 		self.pin = Pin(pin, Pin.IN)
 		# force first read
-		self.tray = Device(name, self.read_pin(), notifier=BinarySensor)
+		self.tray = Device(name, self.read_pin(), dtype="binary_sensor", notifier=ha_setup)
 		self.tray_on = asyncio.Event()
 		self.tray_off = asyncio.Event()
 		if self.tray.state:

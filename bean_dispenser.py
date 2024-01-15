@@ -15,13 +15,6 @@ tray_sensor = Tray("bean/tray", pin=13, invert=True)
 
 import hass
 
-# TODO: May be obsolete if using Device class to instantiate this see TM1637 example
-# provide the name and the Device object to use
-# bean_dispenser = Switch("beans", dispenser.activate)
-# bean_grams = Sensor("beans", dispenser.grams)
-# bean_display = Sensor("beans", display)
-# bean_button = BinarySensor("beans", button)
-
 async def start():
 	asyncio.create_task(hass.start())
 	while True:
