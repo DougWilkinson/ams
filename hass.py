@@ -30,86 +30,88 @@ client = MQTTClient(espMAC, mysecrets.mqtt_server,
 	password=mysecrets.mqtt_pass,
 	keepalive=60)
 
-config_loaded = asyncio.Event()		# config loaded and ready to connect
 wifi_connected = asyncio.Event()
 mqtt_connected = asyncio.Event()
 mqtt_error = asyncio.Event()		# set by pub/sub if error to trigger reconnect
-mqtt_puball = asyncio.Event()
+sub_all = asyncio.Event()
 
 subscribed_topics = {}
 
-async def publish_state(topic, device):
-	started(topic)
+async def publish_state(device):
+	started(device.name)
 	while True:
 		await device.publish.wait()
-		info("pubstate: {}, {}".format(topic,device.state))
-		if type(device.state) is bool:
+		# info("pubstate: {}, {}".format(device.name,device.state))
+		if device.dtype == "binary_sensor":
 			state = "ON" if device.state else "OFF"
 		else:
 			state = str(device.state)
-		publish_queue.put(topic, state)
+		publish_queue.put(gen_topic(device,"/state"), state)
 		device.publish.clear()
 
-def setup(device, dtype):
+def gen_topic(device, post=""):
+	return "{}/{}/{}{}".format(mysecrets.ha_topic_prefix, device.dtype, device.name, post)
+
+def ha_setup(device):
 	info("setup: {}".format(device.name))
-	topic = "{}/{}/{}".format(mysecrets.ha_topic_prefix, dtype, device.name)
-	
-	msg = { "name": device.name, 'uniq_id': device.name, 'obj_id': device.name, 'stat_t': "~/state",
+	msg = { "name": device.name, '~': gen_topic(device), 'uniq_id': device.name, 'obj_id': device.name, 'stat_t': "~/state",
 			'json_attr_t': "~/attrs", "retain": True }
 	if device.units:
 		msg['unit_of_meas'] = device.units
-	if dtype == "switch":
+	if device.dtype == "switch":
 		msg['cmd_t'] = "~/set"
-	if dtype == "cover":
+	if device.dtype == "cover":
 		msg['cmd_t'] = "~/set"
 		msg['pos_t'] = "~_position/state"
-	if dtype == "light":
+	if device.dtype == "light":
 		msg['cmd_t'] = "~/set"
 		msg['bri_cmd_t'] = "~_bri/set"
 		msg['bri_stat_t'] = "~_bri/state"
 		msg['rgb_cmd_t'] = "~_rgb/set"
 		msg['rgb_stat_t'] = "~_rgb/state"
 
-	publish_queue.put(haconfig_topic.format(dtype, device.name ), json.dumps(msg) )
-	asyncio.create_task(publish_state(topic+"/state", device))
+	publish_queue.put(haconfig_topic.format(device.dtype, device.name ), json.dumps(msg) )
+	asyncio.create_task(publish_state(device))
 	# add msgqueue to dict for callback handling
-	subscribed_topics[topic + "/set"] = device.setstate
-	mqtt_puball.set()
+	if not device.ro:
+		subscribed_topics[gen_topic(device,"/set")] = device.setstate
+	sub_all.set()
 
-class Sensor:
-	def __init__(self, device) -> None:
-		setup(device, "sensor")
+# class Sensor:
+# 	def __init__(self, device) -> None:
+# 		setup(device, "sensor")
 
-class Light:
-	def __init__(self, device) -> None:
-		setup(device, "light")
+# class Light:
+# 	def __init__(self, device) -> None:
+# 		setup(device, "light")
 
-class Switch:
-	def __init__(self, device) -> None:
-		setup(device, "switch")
+# class Switch:
+# 	def __init__(self, device) -> None:
+# 		setup(device, "switch")
 
-class BinarySensor:
-	def __init__(self, device) -> None:
-		setup(device, "binary_sensor")
+# class BinarySensor:
+# 	def __init__(self, device) -> None:
+# 		setup(device, "binary_sensor")
 
-class Cover:
-	def __init__(self, device) -> None:
-		setup(device, "cover")
+# class Cover:
+# 	def __init__(self, device) -> None:
+# 		setup(device, "cover")
 
 # Subscribes and resubs when mqtt connection is lost
 async def subscriber(pid):  # (re)connection.
 	started(pid)
 	while True:
 		try:
-			await mqtt_puball.wait()
+			await sub_all.wait()
 			await wifi_connected.wait()
 			await mqtt_connected.wait()
 			for topic in subscribed_topics:
 				if '/' in topic:
 					info('subscriber: {}'.format(topic) )
 					client.subscribe(topic)
+					await asyncio.sleep(1)
 			error("subscriber: All topics resubscribed")
-			mqtt_puball.clear()
+			sub_all.clear()
 		except asyncio.CancelledError:
 			stopped(pid)
 			return
@@ -128,7 +130,7 @@ async def publisher(pid):
 				await wifi_connected.wait()
 				await mqtt_connected.wait()
 				client.publish(topic, msg, retain=True)
-				info("publisher: {}".format(topic) )
+				# info("publisher: {}".format(topic) )
 		except asyncio.CancelledError:
 			stopped(pid)
 			return
@@ -222,7 +224,7 @@ async def mqtt_connection(pid):
 			client.ping()
 			mqtt_connected.set()
 			mqtt_error.clear()
-			mqtt_puball.set()
+			sub_all.set()
 			await mqtt_error.wait()
 		except asyncio.CancelledError:
 			return

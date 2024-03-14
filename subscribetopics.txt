@@ -1,0 +1,22 @@
+# mqtt subscribe topics
+
+utc						rtclock
+switch/set				switch
+light/rgb/set			rgb
+light/bri/set			rgb
+light/set				rgb
+
+
+# mqtt publish topics (/state)
+
+switch					switch
+light/rgb				rgb
+light/bri				rgb
+light					rgb
+binary_sensor			binary
+sensor/analog			analog
+sensor/current			ina219
+
+sensor/temperature		dht. govee
+sensor/humidity			dht, govee
+sensor/battery			govee, analog

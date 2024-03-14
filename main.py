@@ -3,6 +3,18 @@
 from alog import espMAC, info, error, debug, offset_time
 import json
 import asyncio
+from machine import reset
+from time import sleep
+
+def reboot():
+	print("REBOOTING\r\n>>> ")
+	for i in range(10):
+		print(i)
+		sleep(1)
+				 
+	reset()
+	while True:
+		pass
 
 def load_config(name=espMAC, instance="run"):
 	try:
@@ -35,9 +47,10 @@ def save_json(name, content) -> bool:
 		error('save_file: {} failed'.format(name))
 		return False
 
-mod = __import__(load_config())
+hostname = load_config()
+mod = __import__(hostname)
 
 def run():
-	asyncio.run(mod.start())
+	asyncio.run(mod.start(hostname))
 
 run()

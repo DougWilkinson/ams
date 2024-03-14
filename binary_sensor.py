@@ -8,7 +8,7 @@ from alog import info, debug, error, started, stopped, exited
 from aconfig import setup, pubstate
 import asyncio
 
-class Class:
+class BinarySensor:
 	def __init__(self, name, settings) -> None:
 		self.name = name
 		pin_num = settings.get('pin', None)

@@ -1,0 +1,60 @@
+# sample config
+# similar to device class
+
+# motion
+{'binary_sensor/backtest/motion': { 'module': 'binary_sensor', 'pin': 5, 'haconfig': 'binary_sensor'},
+'hass/utc': { 'module': 'logger'}
+ }
+
+#newer motion, dht and logger
+ {'hass/binary_sensor/dining_room/motion/state': {'module': 'logger'}, 'binary_sensor/dining_room/motion': {'pin': 5, 'module': 'binary_sensor'}}
+
+{'binary_sensor/backtest/motion': { 'module': 'binary_sensor', 'pin': 5 }
+{'light/backtest/cabinets': { 'module': 'ledlight', 'pin': 5 }
+{'switch/backtest/charger': { 'module': 'switch', 'pin': 5 }
+{'cover/backtest/curtain': { 'module': 'cover', 'pin': 5 }
+{'sensor/dining/dht': { 'module': 'dht', 'pin': 5 }
+
+
+core config:
+	rtclock (servers, interval, ntp, mqtt)
+	mqtt_as (wifi and mqtt) mqtt_as config
+	log (log level)
+
+entity_name (unique)
+entity_modules:
+	nightlight
+	ledclock
+	matrixclock
+	oledclock
+	feeder
+	cover
+	charger
+	chimeclock
+	airmonble
+	airmondht
+
+
+
+units
+var type
+
+events
+
+"entity":"entity"
+"motion":"nightlight"
+"schedule":"cover"
+
+supporting modules imported by higher function modules
+ha_cover
+ha_light
+ha_sensor
+ha_switch
+ha_binary
+matrix_display
+oled_ssd1306
+oled_sh1106
+oled_ili9341
+
+# backtest
+{'cover.blinds': {'direction_pin': 15, 'delay': 1250, 'timeout': 5000, 'enable_pin': 12, 'limit_pin': 4, 'backoff': 0, 'invert_dir': 0, 'step_pin': 13, 'limit_pullup': 0, 'invert_limit': 0, 'maxsteps': 300, 'encoder_pin': 4}, 'rgb.nightlight': {'bright': 3, 'haconfig': 0, 'rgb': '192,24,0'}, 'ledlight.ledlight': {'night_name': 'rgb.nightlight', 'pin': 14, 'motion_name': 'motion.motion', 'night_delay': 20, 'light_name': 'rgb.ledlight', 'leds': 100, 'night_rgb': '0,4,4'}, 'rtclock.rtclock': {'server': '192.168.5.1', 'timezone': -5, 'poll_seconds': 320, 'rl': 0}, 'motion.motion': {'retrigger_time': 2, 'invert': 0, 'name': 'motion', 'pin': 5}, 'wifimqtt.wifimqtt': {'mqttuser': 'sheldon', 'mqttpass': 'beeblebrox', 'nodename': 'backtest', 'rl': 0, 'mqttserver': '192.168.1.15', 'wifipass': 'ph03b3tuck13', 'wifiname': 'jugglers'}, 'rgb.ledlight': {'bright': 3, 'haconfig': 0, 'rgb': '192,24,0'}}
