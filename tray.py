@@ -1,6 +1,7 @@
 # tray.py
 
-version = (1,0,0)
+# added easier access to is_on and is_off status
+version = (1,0,1)
 
 from machine import Pin
 import time
@@ -17,29 +18,35 @@ class Tray:
 		self.pin = Pin(pin, Pin.IN)
 		# force first read
 		self.tray = Device(name, self.read_pin(), dtype="binary_sensor", notifier=ha_setup)
-		self.tray_on = asyncio.Event()
-		self.tray_off = asyncio.Event()
+		self._on = asyncio.Event()
+		self._off = asyncio.Event()
 		if self.tray.state:
-			self.tray_on.set()
+			self._on.set()
 		else:
-			self.tray_off.set()
+			self._off.set()
 		asyncio.create_task(self.update_state())		
 
+	def is_on(self):
+		return self._on.is_set()
+	
+	def is_off(self):
+		return self._off.is_set()
+	
 	async def update_state(self):
 		while True:
 			while self.read_pin():
 				await asyncio.sleep(1)
 			info("tray is off")
 			self.tray.publish.set()
-			self.tray_on.clear()
-			self.tray_off.set()
+			self._on.clear()
+			self._off.set()
 			await asyncio.sleep(1)
 			while not self.read_pin():
 				await asyncio.sleep(1)
 			info("tray is on")
 			self.tray.publish.set()
-			self.tray_on.set()
-			self.tray_off.clear()
+			self._on.set()
+			self._off.clear()
 			await asyncio.sleep(1)
 
 	def read_pin(self):
