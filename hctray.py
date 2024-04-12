@@ -1,30 +1,32 @@
-# tray.py
+# hctray.py
 
-# added easier access to is_on and is_off status
-version = (1,0,1)
+# HC-SR04 sonic distance 
+version = (1,0,0)
 
 from machine import Pin
-import time
+from time import sleep_us, ticks_us
 from alog import info, debug, error, started, stopped, exited
-import uasyncio as asyncio
+import asyncio
 from device import Device
 from hass import ha_setup
 
-class Tray:
-	def __init__(self, name, pin=13, invert=True ):
+class HCTray:
+	def __init__(self, name="tray", echo_pin=13, trig_pin=15, invert=False ):
 		started(name)
 		self.name = name
 		self.invert = invert
-		self.pin = Pin(pin, Pin.IN)
+		self.trig_pin = Pin(trig_pin, Pin.OUT, value=0)
+		self.echo_pin = Pin(echo_pin, Pin.IN)
+		#self.measure()
 		# force first read
-		self.tray = Device(name, self.read_pin(), dtype="binary_sensor", notifier=ha_setup)
+		self.tray = Device(name, 0, dtype="binary_sensor", notifier=ha_setup)
 		self._on = asyncio.Event()
 		self._off = asyncio.Event()
 		if self.tray.state:
 			self._on.set()
 		else:
 			self._off.set()
-		asyncio.create_task(self.update_state())		
+		#asyncio.create_task(self.update_state())		
 
 	def is_on(self):
 		return self._on.is_set()
@@ -49,5 +51,14 @@ class Tray:
 			self._off.clear()
 			await asyncio.sleep(1)
 
-	def read_pin(self):
-		return (not self.pin.value()) if self.invert else (self.pin.value() > 0)
+	def measure(self):
+		self.trig_pin.on()
+		sleep_us(10)
+		self.trig_pin.off()
+		echo_start = ticks_us()
+		for i in range(100000):
+			echo_end = ticks_us()
+			if self.echo_pin.value():
+				break
+		return echo_end - echo_start
+			

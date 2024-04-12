@@ -4,7 +4,7 @@ from time import sleep_us
 from machine import Pin
 from alog import error, stopped, started
 from device import Device
-from hass import Sensor
+from hass import ha_setup
 import asyncio
 
 CMD1 = const(64)
@@ -33,8 +33,8 @@ class TM1637:
 		self._write_data_cmd()
 		self._write_dsp_ctrl()
 
-		self.string = Device(name + "/string", "    ", notifier=Sensor)
-		self.brightness = Device(name + "/brightness", brightness, notifier=Sensor)
+		self.string = Device(name + "/string", "    ", dtype="sensor", notifier=ha_setup)
+		self.brightness = Device(name + "/brightness", brightness, dtype="sensor", notifier=ha_setup)
 
 		# self.string = Device("string", "hello -- ")
 		# self.brightness = Device("brightness", brightness)

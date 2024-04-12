@@ -1,0 +1,49 @@
+# adevice.py
+
+# Classes that do actual stuff
+# define methods needed, not all will be used
+# state -> MsgQueue()
+# brightness -> MsgQueue()
+# rgb -> MsgQueue()
+# position -> MsgQueue()
+# event -> Event()			# clearable event
+# result -> MsgQueue()		# more than one event
+# error -> MsgQueue()		# error conditions
+
+from ledlight import LEDLight
+from motionsensor import MotionSensor
+from stepper import Stepper
+from motor import Motor
+from dhtsensor import DHTSensor
+
+# returns a class with methods:
+# each adds handlers to asyncio
+motion = MotionSensor("name", "pin")
+cabinet = LEDLight("name", "pin", "num_leds", "rgb", "brightness", "trigger_event", "units")
+cabinet = LEDLight(name="cabinet", pin=4, num_leds=25, rgb=(0,255,255), brightness=10, trigger=motion.trigger, units="")
+
+# optional if not needing HA features
+# Each Class for ha imports MQTT
+# kitlight = Light()
+# creates topic/msg to configure HA
+from hass import Light, BinarySensor, Switch, Sensor, Cover
+
+from coffeescale import Coffee
+
+coffee_disp = Coffee("coffee_beans")
+
+
+# optional if you don't need wifi or rtclock
+# core start() async coro to start wifi and rtclock
+# wifi is an Event() to be handed to other coros and is set when wifi is connected
+from core import start
+
+start()
+
+
+
+
+
+
+
+start(device_handlers, core_handlers, homeassistant_handlers)
