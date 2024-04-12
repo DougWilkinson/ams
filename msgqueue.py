@@ -1,5 +1,5 @@
 # msgqeue.py
-import asyncio
+import uasyncio as asyncio
 
 # Taken from Peter Hinch's mqtt_as code
 class MsgQueue:

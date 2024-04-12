@@ -1,4 +1,5 @@
 # hx711.py
+version = (1, 0, 3)
 
 from time import sleep, sleep_us
 from machine import Pin

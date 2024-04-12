@@ -1,34 +1,35 @@
 # beans.py
 
-# remove tray_sensor
-version = (1,0,1)
+# latest version with no display or button
+version = (1, 0, 3)
 
-import asyncio
+import uasyncio as asyncio
 from hx711 import HX711
-from tm1637 import TM1637
 from dispenser import Dispenser
+from rgbstatus import RGBStatus
 from button import Button
-from tray import Tray
-# from hass import Switch, Sensor, BinarySensor
+# notifier is hass
+import hass
 
 # hardware is initialized (set pins, etc)
 #hx=HX711(hxclock_pin=12, hxdata_pin=14, k=386)
 # k=475 for small kitchen scale/coffee beans for grams
 # k=13463 for ounces
 hx=HX711(hxclock_pin=12, hxdata_pin=14, k=475, offset=0)
-display = TM1637("beans_display", data_pin=0, clock_pin=4, brightness=5, speed=180)
-# tray_sensor = Tray("beans/tray", pin=13, invert=True)
-dispenser = Dispenser("beans_dispenser", cycles=3, hx_read=hx.raw_read, motor_pin=5, display=display.string.setstate)
-button = Button("beans_touch", pin=15, invert=False)
+rgb = RGBStatus(pin=15, num_leds=3, brightness=15, min_brightness=5)
+dispenser = Dispenser("beans_dispenser", grams="34", rgb=rgb.status, hx=hx.raw_read, motor_pin=5)
+button = Button("beans_button", pin=13, invert=False)
 
-import hass
-
-async def start():
+async def start(hostname):
 	asyncio.create_task(hass.start())
 	while True:
-		await dispenser.dispensed.event.wait()
+		rgb.status.set_state(dispenser.grams.state)
+		await asyncio.sleep(2)
+		rgb.status.set_state("glow_green")
 		await button.wait()
-		dispenser.activate.setstate.put("state", "ON")
-		await asyncio.sleep(5)
+		if dispenser.grams.state == "34":
+			dispenser.grams.set_state("17")
+		else:
+			dispenser.grams.set_state("34")
 
 # asyncio.run(dispense())

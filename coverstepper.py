@@ -38,7 +38,7 @@ class CoverStepper:
 		
 		self.max_steps = max_steps
 		self.direction = -1
-		asyncio.create_task(self._activate(self.activate.setstate) )
+		asyncio.create_task(self._activate(self.activate.set_state) )
 
 	def onestep(self):
 		self.step_pin.value(1)

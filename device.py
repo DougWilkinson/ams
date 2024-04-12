@@ -1,20 +1,30 @@
 # device.py
 version = (1,0,1)
 from msgqueue import MsgQueue
-from asyncio import Event
+from uasyncio import Event
+
+# Device class holds values usually for publishing/subscribing
+# state is always a string!
+# ro = read only (do not set from notifier)
+# dtype = sensor, switch, light, binary_sensor
+# notifier = function to call to set up input/output if device changes or is changed
+# This is usually MQTT/Homeassistant (ha_setup) from hass.py but could be extended
 
 class Device:
-	def __init__(self, name, state="", units="", ro=False, dtype="sensor", notifier=None ) -> None:
+	def __init__(self, name, state="", units="", ro=False, dtype="sensor", notifier_setup=None ) -> None:
 		self.name = name
 		self.dtype = dtype
 		self.state = state
 		self.units = units
 		self.ro = ro
-		self.setstate = MsgQueue(1)
+		self.q = MsgQueue(1)
 		self.event = Event()
 		self.publish = Event()
 		self.publish.set()
-		if notifier:
+		if notifier_setup:
 			# call notifier with this object to setup
-			notifier(self)
-
+			notifier_setup(self)
+	
+	def set_state(self, state, topic="state"):
+		self.q.put(topic, str(state))
+		self.publish.set()

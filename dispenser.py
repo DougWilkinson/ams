@@ -1,38 +1,49 @@
 # dispenser.py
 
 # 1,0,3 - fixed last = raw placement
-version = (1,0,3)
+version = (1, 1, 0)
 
 from time import time, sleep, sleep_us, sleep_ms, ticks_us
 from machine import Pin
 from alog import info, debug, started
 from device import Device
 from hass import ha_setup
-import asyncio
+import uasyncio as asyncio
+
+class HXTray():
+	def __init__(self, hx, on=300, off=200):
+		self.on = on
+		self.off = off
+		self.hx = hx
+	
+	def is_on(self):
+		return self.hx() > self.on
+	
+	def is_off(self):
+		return self.hx() < self.off
 
 class Dispenser():
 
-	def is_on(self):
-		return True
-	def is_off(self):
-		return False
-
-	def __init__(self, name, display=None, cycles=3, tray=None, motor_pin=5, hx_read=None ):
+	# display = alphanumeric display device is "string"
+	# status = neopixel status values = "glow_green", "red_pulse", "busy"
+	def __init__(self, name, display=None, rgb=None, grams="34", tray=None, motor_pin=5, hx_read=None ):
 		self.motor_pin = Pin(motor_pin, Pin.OUT)
 		self.motor_pin.off()
 		started(name)
 
 		self.activate = Device(name + "/activate", "OFF", dtype="switch", notifier=ha_setup)
-		self.cycles = Device(name + "/cycles", state=cycles, dtype="sensor", notifier=ha_setup)
+		self.grams = Device(name + "/grams", state=grams, dtype="sensor", units="g", notifier=ha_setup)
 		self.dispensed = Device(name + "/dispensed", state=0, units="g", ro=True, dtype="sensor", notifier=ha_setup)
 		# set this event to signal "not busy dispensing"
 		self.dispensed.event.set()
-
+		self.rgb_status = rgb
 		self.hx_read = hx_read
 		if tray:
+			# use tray object to (switch?) to signal is_on or is_off
 			self.tray = tray
 		else:
-			self.tray = self
+			# Use hx value to determine if tray/cup is on or off
+			self.tray = HXTray(self.average)
 		self.flick_ms = 50
 		self.rawvalue = 0
 		self.sorted_vals = []
@@ -41,33 +52,24 @@ class Dispenser():
 		# flag set when something changes
 		self.error = ""
 		self.display = display
-		# start waiting for state changes
-		asyncio.create_task(self._activate(self.activate.setstate) )
-		asyncio.create_task(self._cycles(self.cycles.setstate) )
+		# start waiting for state change
+		asyncio.create_task(self._activate() )
 
-	async def _activate(self, queue):
-		async for _, msg in queue:
+	async def _activate(self):
+		async for _, msg in self.activate.q:
 			info("dispenser: _activate:")
 			if "ON" != msg:
 				continue
 			if self.tray.is_off():
 				continue
 			self.activate.event.set()
-			self.actual, self.error = await self.measure()
+			self.actual, self.error = await self.measure(int(self.grams.state))
 			self.dispensed.state = self.actual
 			self.dispensed.publish.set()
 			self.activate.event.clear()
 			self.dispensed.event.set()
-			# Update state at end of dispense to OFF
-			self.activate.publish.set()
-			if self.error:
+			if self.error and self.display:
 				self.display.put("state", "err - {} g - ".format(self.actual) )
-
-	async def _cycles(self, queue):
-		async for _, msg in queue:
-			info("dispenser: _cycles")
-			self.cycles.state = int(msg)
-			self.cycles.publish.set()
 
 	# averages 3 values over 1 second
 	def average(self):
@@ -88,6 +90,8 @@ class Dispenser():
 			# flick until cycles seen or bin is full
 			while low_count < 12 and raw - tare < grams and self.tray.is_on():
 				self.motor_pin.on()
+				# run continuously until 80%
+				# Then start flicking by turning off motor and waiting
 				if (raw-tare) / grams >= 0.8:
 					sleep_ms(flick)
 					self.motor_pin.off()			

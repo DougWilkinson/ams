@@ -1,8 +1,9 @@
 # main.py
+version = (1, 0, 3)
 
 from alog import espMAC, info, error, debug, offset_time
 import json
-import asyncio
+import uasyncio as asyncio
 from machine import reset
 from time import sleep
 
@@ -49,6 +50,8 @@ def save_json(name, content) -> bool:
 
 hostname = load_config()
 mod = __import__(hostname)
+
+# load_config() has at minimum a hostname to tell main.py what to import/start
 
 def run():
 	asyncio.run(mod.start(hostname))

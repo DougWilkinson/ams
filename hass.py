@@ -1,15 +1,13 @@
 # hass.py
 
-# main.py
-
-version = ( 1, 0, 0)
+version = ( 1, 0, 3)
 
 from network import WLAN, AP_IF, STA_IF
 WLAN(AP_IF).active(False)
 wlan = WLAN(STA_IF)
 wlan.active(True)
 
-import asyncio
+import uasyncio as asyncio
 from gc import mem_free, collect
 from time import localtime, time, sleep
 from machine import RTC, reset
@@ -52,6 +50,10 @@ async def publish_state(device):
 def gen_topic(device, post=""):
 	return "{}/{}/{}{}".format(mysecrets.ha_topic_prefix, device.dtype, device.name, post)
 
+# Notifier used to initialize an HA/MQTT device
+# Create HA entity based on dtype
+# Create an async task to update state if it changes
+# Add to subscribe list if not Read Only
 def ha_setup(device):
 	info("setup: {}".format(device.name))
 	msg = { "name": device.name, '~': gen_topic(device), 'uniq_id': device.name, 'obj_id': device.name, 'stat_t': "~/state",
@@ -74,7 +76,7 @@ def ha_setup(device):
 	asyncio.create_task(publish_state(device))
 	# add msgqueue to dict for callback handling
 	if not device.ro:
-		subscribed_topics[gen_topic(device,"/set")] = device.setstate
+		subscribed_topics[gen_topic(device,"/set")] = device
 	sub_all.set()
 
 # class Sensor:
@@ -177,8 +179,15 @@ def msg_cb(topic, msg):
 	info('cb: {}'.format(topic))
 	td = topic.decode("utf-8")
 	if td in subscribed_topics:
-		# holds setstate MsgQueue, so put directly to device here
-		subscribed_topics[td].put(td, msg.decode("utf-8"))
+		# subscribed_topics holds the topic and device object
+		device = subscribed_topics[td]
+		newstate = msg.decode("utf-8")
+		# Add value to MsgQueue (setstate)
+		device.setstate.put(td, newstate)
+		# update device state with new value
+		device.state = newstate
+		# set publish flag to publish new value
+		device.publish.set()
 
 # ping mqtt every 30 seconds
 async def mqtt_ping(pid):
