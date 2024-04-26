@@ -1,13 +1,14 @@
 # beans.py
 
 # latest version with no display or button
-version = (1, 0, 3)
+version = (2,0,0)
 
 import uasyncio as asyncio
 from hx711 import HX711
 from dispenser import Dispenser
 from rgbstatus import RGBStatus
 from button import Button
+from alog import info
 # notifier is hass
 import hass
 
@@ -15,21 +16,24 @@ import hass
 #hx=HX711(hxclock_pin=12, hxdata_pin=14, k=386)
 # k=475 for small kitchen scale/coffee beans for grams
 # k=13463 for ounces
-hx=HX711(hxclock_pin=12, hxdata_pin=14, k=475, offset=0)
-rgb = RGBStatus(pin=15, num_leds=3, brightness=15, min_brightness=5)
-dispenser = Dispenser("beans_dispenser", grams="34", rgb=rgb.status, hx=hx.raw_read, motor_pin=5)
-button = Button("beans_button", pin=13, invert=False)
+hx=HX711(hxclock_pin=12, hxdata_pin=14, k=475, max=300, offset=0, samples=5)
+rgb = RGBStatus("beans", pin=15, num_leds=3, brightness=15, min_brightness=5)
+dispenser = Dispenser("beans", grams="34", tray=hx.high, rgb=rgb.status, hx_average=hx.average, motor_pin=5)
+button = Button("beans", pin=13, pullup=True, invert=True)
 
 async def start(hostname):
+	info("beans: Before hass.start")
 	asyncio.create_task(hass.start())
+	info("beans: after hass.start")
 	while True:
-		rgb.status.set_state(dispenser.grams.state)
-		await asyncio.sleep(2)
-		rgb.status.set_state("glow_green")
+		info("beans: grams set: {} - waiting for button".format(dispenser.grams.state))
 		await button.wait()
+		if dispenser.grams.state == "17":
+			rgb.status.set_state("glow_one")
 		if dispenser.grams.state == "34":
-			dispenser.grams.set_state("17")
-		else:
-			dispenser.grams.set_state("34")
+			rgb.status.set_state("glow_two")
+		await asyncio.sleep(4)
+		# ready to go, if tray not set, this should just skip
+		dispenser.grams.set_state(dispenser.grams.state)
 
 # asyncio.run(dispense())

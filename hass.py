@@ -1,6 +1,7 @@
 # hass.py
 
-version = ( 1, 0, 3)
+version = (2,0,1)
+# 2,0,1: Add last will status and list to start cores
 
 from network import WLAN, AP_IF, STA_IF
 WLAN(AP_IF).active(False)
@@ -28,6 +29,8 @@ client = MQTTClient(espMAC, mysecrets.mqtt_server,
 	password=mysecrets.mqtt_pass,
 	keepalive=60)
 
+client.set_last_will('hass/sensor/esp/{}/state'.format(espMAC), 'offline', retain=True)
+
 wifi_connected = asyncio.Event()
 mqtt_connected = asyncio.Event()
 mqtt_error = asyncio.Event()		# set by pub/sub if error to trigger reconnect
@@ -40,11 +43,7 @@ async def publish_state(device):
 	while True:
 		await device.publish.wait()
 		# info("pubstate: {}, {}".format(device.name,device.state))
-		if device.dtype == "binary_sensor":
-			state = "ON" if device.state else "OFF"
-		else:
-			state = str(device.state)
-		publish_queue.put(gen_topic(device,"/state"), state)
+		publish_queue.put(gen_topic(device,"/state"), device.state)
 		device.publish.clear()
 
 def gen_topic(device, post=""):
@@ -55,7 +54,7 @@ def gen_topic(device, post=""):
 # Create an async task to update state if it changes
 # Add to subscribe list if not Read Only
 def ha_setup(device):
-	info("setup: {}".format(device.name))
+	info("ha_setup: {}".format(device.name))
 	msg = { "name": device.name, '~': gen_topic(device), 'uniq_id': device.name, 'obj_id': device.name, 'stat_t': "~/state",
 			'json_attr_t': "~/attrs", "retain": True }
 	if device.units:
@@ -79,29 +78,9 @@ def ha_setup(device):
 		subscribed_topics[gen_topic(device,"/set")] = device
 	sub_all.set()
 
-# class Sensor:
-# 	def __init__(self, device) -> None:
-# 		setup(device, "sensor")
-
-# class Light:
-# 	def __init__(self, device) -> None:
-# 		setup(device, "light")
-
-# class Switch:
-# 	def __init__(self, device) -> None:
-# 		setup(device, "switch")
-
-# class BinarySensor:
-# 	def __init__(self, device) -> None:
-# 		setup(device, "binary_sensor")
-
-# class Cover:
-# 	def __init__(self, device) -> None:
-# 		setup(device, "cover")
-
 # Subscribes and resubs when mqtt connection is lost
-async def subscriber(pid):  # (re)connection.
-	started(pid)
+async def sub():  # (re)connection.
+	started("sub")
 	while True:
 		try:
 			await sub_all.wait()
@@ -109,13 +88,13 @@ async def subscriber(pid):  # (re)connection.
 			await mqtt_connected.wait()
 			for topic in subscribed_topics:
 				if '/' in topic:
-					info('subscriber: {}'.format(topic) )
+					info('sub: {}'.format(topic) )
 					client.subscribe(topic)
 					await asyncio.sleep(1)
-			error("subscriber: All topics resubscribed")
+			error("sub: All topics resubscribed")
 			sub_all.clear()
 		except asyncio.CancelledError:
-			stopped(pid)
+			stopped("sub")
 			return
 		except:
 			# Signal mqtt reconnect
@@ -123,29 +102,29 @@ async def subscriber(pid):  # (re)connection.
 			mqtt_error.set()
 	exited(pid)
 
-async def publisher(pid):
+async def pub():
 	global publish_queue
-	started(pid)
+	started("pub")
 	while True:
 		try:
 			async for topic, msg in publish_queue:
 				await wifi_connected.wait()
 				await mqtt_connected.wait()
 				client.publish(topic, msg, retain=True)
-				# info("publisher: {}".format(topic) )
+				info("pub: topic: {}".format(topic) )
 		except asyncio.CancelledError:
-			stopped(pid)
+			stopped("pub")
 			return
 		except:
 			mqtt_connected.clear()
 			mqtt_error.set()
-			error('pub: Error during {}'.format(topic))
+			error('pub: Error topic {}'.format(topic))
 			await asyncio.sleep(1)
 
 # Keeps wifi connected
 # TODO: Add error handling hard reset
-async def wifi(pid):
-	started(pid)
+async def wifi():
+	started("wifi")
 	essid = wlan.config('essid')
 	while True:
 		try:
@@ -156,76 +135,72 @@ async def wifi(pid):
 			if wlan.isconnected():
 				continue
 			wifi_connected.clear()
-			info("wifi: connect {}".format(mysecrets.wifi_name))
+			info("wifi: connecting to {}".format(mysecrets.wifi_name))
 			if essid == '':
 				wlan.connect(mysecrets.wifi_name, mysecrets.wifi_pass)
 			else:
 				wlan.connect()
 			await asyncio.sleep(2)
 		except asyncio.CancelledError:
-			stopped(pid)
+			stopped("wifi")
 			return
 		except:
-			error("wifi: error - restarting")
+			error("wifi: error, hard reset")
 			wlan.disconnect()
 			wlan.active(False)
 			await asyncio.sleep(1)
 			wlan.active(True)
-			debug("wifi: activated")
+			debug("wifi: connected!")
 	exited(pid)
 
 # Callback for MQTTClient
-def msg_cb(topic, msg):
-	info('cb: {}'.format(topic))
+def cb(topic, msg):
+	info('cb: topic: {}'.format(topic))
 	td = topic.decode("utf-8")
 	if td in subscribed_topics:
 		# subscribed_topics holds the topic and device object
 		device = subscribed_topics[td]
-		newstate = msg.decode("utf-8")
-		# Add value to MsgQueue (setstate)
-		device.setstate.put(td, newstate)
 		# update device state with new value
-		device.state = newstate
-		# set publish flag to publish new value
-		device.publish.set()
+		device.set_state(msg.decode("utf-8"))
+		# put directly in publish_queue to be published on next await
+		device.publish.clear()
+		publish_queue.put(gen_topic(device,"/state"), device.state)
 
 # ping mqtt every 30 seconds
-async def mqtt_ping(pid):
-	started(pid)
+async def ping():
+	started("ping")
 	while True:
 		try:
 			await mqtt_connected.wait()
 			client.ping()
 			await asyncio.sleep(30)
 		except asyncio.CancelledError:
-			stopped(pid)
+			stopped("ping")
 			return
 		except OSError:
 			mqtt_connected.clear()
 			mqtt_error.set()
-	exited(pid)
 
 # Check for incoming MQTT messages (calls callback if received)
-async def mqtt_check(pid):
-	started(pid)
+async def check():
+	started("check")
 	while True:
 		try:
 			await mqtt_connected.wait()
 			client.check_msg()
 			await asyncio.sleep(0)
 		except asyncio.CancelledError:
-			stopped(pid)
+			stopped("check")
 			return
 		except OSError:
 			mqtt_connected.clear()
 			mqtt_error.set()
-	exited(pid)
 
 # Maintain MQTTclient connection, reconnect if flagged as bad
 # TODO: "test" if server is available using sockets
-async def mqtt_connection(pid):
-	started(pid)
-	client.set_callback(msg_cb)
+async def mqtt():
+	started("mqtt")
+	client.set_callback(cb)
 	while True:
 		try:
 			await wifi_connected.wait()
@@ -236,26 +211,19 @@ async def mqtt_connection(pid):
 			sub_all.set()
 			await mqtt_error.wait()
 		except asyncio.CancelledError:
+			stopped("mqtt")
 			return
 		except OSError:
 			error("mqtt: connect error")
 			await asyncio.sleep(2)
-	exited(pid)
 
-handlers = {
-		'wifi': wifi,
-		'mqtt_connection': mqtt_connection,
-		'mqtt_ping': mqtt_ping,
-		'mqtt_check': mqtt_check,  
-		# 'rtclock': rtclock, 
-		'publisher': publisher,
-		'subscriber': subscriber }
+handlers = [ wifi, mqtt, ping, check, pub, sub ]
 
 async def start():
 	started("loading core modules ...")
 	# Load core modules
-	for _pid, coro in handlers.items():
-		asyncio.create_task(coro(_pid))
+	for coro in handlers:
+		asyncio.create_task(coro())
 	collect()
 	error("hass:start: awaiting core modules ..." )
 	await asyncio.sleep(5)

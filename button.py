@@ -5,14 +5,17 @@ version = (1,0,0)
 from machine import Pin
 import time
 from alog import info, debug, error, started, stopped, exited
-import asyncio
+import uasyncio as asyncio
 
 class Button:
-	def __init__(self, name, pin=15, invert=False ):
+	def __init__(self, name, pin=15, pullup=False, invert=False ):
 		started(name)
 		self.name = name
 		self.invert = invert
-		self.pin = Pin(pin, Pin.IN)
+		if pullup:
+			self.pin = Pin(pin, Pin.IN, Pin.PULL_UP)
+		else:
+			self.pin = Pin(pin, Pin.IN)
 		# force first read
 		self.last = not self.read_pin()
 

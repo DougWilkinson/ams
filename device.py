@@ -1,5 +1,5 @@
 # device.py
-version = (1,0,1)
+version = (2,0,0)
 from msgqueue import MsgQueue
 from uasyncio import Event
 
@@ -27,4 +27,5 @@ class Device:
 	
 	def set_state(self, state, topic="state"):
 		self.q.put(topic, str(state))
+		self.state = state
 		self.publish.set()

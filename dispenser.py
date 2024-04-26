@@ -1,49 +1,34 @@
 # dispenser.py
 
-# 1,0,3 - fixed last = raw placement
-version = (1, 1, 0)
+version = (2, 0, 0)
 
-from time import time, sleep, sleep_us, sleep_ms, ticks_us
+from time import sleep_ms
 from machine import Pin
-from alog import info, debug, started
+from alog import info, started, error
 from device import Device
 from hass import ha_setup
 import uasyncio as asyncio
 
-class HXTray():
-	def __init__(self, hx, on=300, off=200):
-		self.on = on
-		self.off = off
-		self.hx = hx
-	
-	def is_on(self):
-		return self.hx() > self.on
-	
-	def is_off(self):
-		return self.hx() < self.off
-
 class Dispenser():
 
 	# display = alphanumeric display device is "string"
-	# status = neopixel status values = "glow_green", "red_pulse", "busy"
-	def __init__(self, name, display=None, rgb=None, grams="34", tray=None, motor_pin=5, hx_read=None ):
+	# rgb = neopixel status values = "glow_green", "red_pulse", "busy"
+	def __init__(self, name, display=None, rgb=None, grams="34", tray=None, motor_pin=5, hx_average=None ):
 		self.motor_pin = Pin(motor_pin, Pin.OUT)
 		self.motor_pin.off()
 		started(name)
 
-		self.activate = Device(name + "/activate", "OFF", dtype="switch", notifier=ha_setup)
-		self.grams = Device(name + "/grams", state=grams, dtype="sensor", units="g", notifier=ha_setup)
-		self.dispensed = Device(name + "/dispensed", state=0, units="g", ro=True, dtype="sensor", notifier=ha_setup)
-		# set this event to signal "not busy dispensing"
-		self.dispensed.event.set()
+		#self.activate = Device(name + "/activate", state="", notifier_setup=ha_setup)
+		self.grams = Device(name + "/grams", state=grams, units="g", notifier_setup=ha_setup)
+		self.dispensed = Device(name + "/dispensed", state="0", units="g", ro=True, notifier_setup=ha_setup)
+		# rgb is a device where string is set
+		# glow_one, glow_two, glow_green, pulse_red, unknown
 		self.rgb_status = rgb
-		self.hx_read = hx_read
-		if tray:
-			# use tray object to (switch?) to signal is_on or is_off
-			self.tray = tray
-		else:
-			# Use hx value to determine if tray/cup is on or off
-			self.tray = HXTray(self.average)
+		# average is callable returning rolling average
+		self.hx_average = hx_average
+		# tray is a callable returning boolean where if True, tray is in place/detected
+		self.tray = tray
+		# flick is time motor is off between measurements
 		self.flick_ms = 50
 		self.rawvalue = 0
 		self.sorted_vals = []
@@ -53,77 +38,91 @@ class Dispenser():
 		self.error = ""
 		self.display = display
 		# start waiting for state change
-		asyncio.create_task(self._activate() )
+		asyncio.create_task(self._dispense_grams() )
+		asyncio.create_task(self._tray_status() )
 
-	async def _activate(self):
-		async for _, msg in self.activate.q:
-			info("dispenser: _activate:")
-			if "ON" != msg:
+	async def _dispense_grams(self):
+		async for _, msg in self.grams.q:
+			info("dispenser: activate: msg: {}".format(msg))
+			#self.activate.set_state("OFF")
+			#print("activate: ", self.activate.state, self.activate.publish.is_set())
+			try:
+				grams = int(msg)
+			except ValueError:
 				continue
-			if self.tray.is_off():
-				continue
-			self.activate.event.set()
-			self.actual, self.error = await self.measure(int(self.grams.state))
-			self.dispensed.state = self.actual
-			self.dispensed.publish.set()
-			self.activate.event.clear()
-			self.dispensed.event.set()
-			if self.error and self.display:
-				self.display.put("state", "err - {} g - ".format(self.actual) )
-
-	# averages 3 values over 1 second
-	def average(self):
-		for i in range(3):
-			self.values[i] = self.hx_read()
-			sleep_ms(300)
-		return sum(self.values)/3
-
+			self.rgb_status.set_state("steady")
+			self.actual, self.error = await self.measure(grams)
+			if self.error:
+				if self.display:
+					self.display.put("state", "err - {} g - ".format(self.actual) )
+				if self.rgb_status:
+					self.rgb_status.set_state("pulse_red")
+			else:
+				self.dispensed.set_state(self.actual)
+				if self.display:
+					self.display.set_state(self.actual )
+				if self.rgb_status:
+					if self.grams.state == "17":
+						self.rgb_status.set_state("glow_one")
+					if self.grams.state == "34":
+						self.rgb_status.set_state("glow_two")
+			info("dispenser: waiting for tray off")
+			while self.tray():
+				await asyncio.sleep(1)
+	
+	async def _tray_status(self):
+			while True:
+				info("dispenser: tray on - hx: {}".format(self.hx_average() ) )
+				self.rgb_status.set_state("glow_green")
+				while self.tray():
+					await asyncio.sleep(1)
+				info("dispenser: tray off - hx: {}".format(self.hx_average() ) )
+				self.rgb_status.set_state("pulse_red")
+				while not self.tray():
+					await asyncio.sleep(1)
+			
 	async def measure(self, grams=17, flick=100, waitsec=2):
 		#info("target: {} cycles".format(self.cycles.state) )
 		rgrams = 0
+		error_msg = None
 		try:
-			tare = self.average()
-			raw = tare
+			tare = self.hx_average()
+			avg = tare
 			last = tare
 			low_count = 0
-			
+
+			info("  rgrams    grams      avg     last     diff    low_c")			
 			# flick until cycles seen or bin is full
-			while low_count < 12 and raw - tare < grams and self.tray.is_on():
+			while avg - tare < grams:
+				if not self.tray():
+					error_msg = "no tray"
+					raise UserWarning
+				if low_count > 12:
+					error_msg = "no beans"
+					raise UserWarning
 				self.motor_pin.on()
 				# run continuously until 80%
 				# Then start flicking by turning off motor and waiting
-				if (raw-tare) / grams >= 0.8:
+				if (avg-tare) / grams >= 0.8:
 					sleep_ms(flick)
 					self.motor_pin.off()			
 					await asyncio.sleep(waitsec)
-					info("{} / {} / {}".format(raw, last, raw-last) )
-					if raw - last < .3:
-						low_count += 1
-					else:
-						low_count = 0
-					last = raw
+				#info("{} / {} / {}".format(avg, last, avg-last) )
+				if avg - last < .3:
+					low_count += 1
+				else:
+					low_count = 0
+				last = avg
 
-				raw = self.average()
-				rgrams = round( raw-tare,1 )
-				info("{} / {} / {}".format(rgrams, grams, low_count) )
-							
-			# while raw - tare < grams and self.tray.is_on():
-			# 	self.motor_pin.on()
-			# 	sleep_ms(flick)
-			# 	self.motor_pin.off()			
-			# 	await asyncio.sleep(waitsec)
-			# 	raw = self.average()
-			# 	rgrams = round( raw-tare,1 )
-			# 	info("{} / {}".format(rgrams, grams) )
-			# 	# if raw < last:
-			# 	# 	raw = last
-				
-			# 	last = raw
+				# put sleep here before taking measurement for max settling
+				await asyncio.sleep_ms(500)
+				avg = self.hx_average()
+				rgrams = avg-tare
+				info("{:>8.2f},{:>8.2f},{:>8.2f},{:>8.2f},{:>8.2f},{:>8.2f}".format(rgrams, grams, avg, last, avg-last, low_count) )							
 
-			self.motor_pin.off()
+			info("dispenser: measure: Success: {} grams".format(rgrams))
 		except:
-			self.motor_pin.off()
-		if self.display:
-			self.display.put( "state", int(rgrams) )
-			await asyncio.sleep(0)
-		return str(rgrams), ""
+			error("dispenser: measure: {} - {}".format(rgrams, error_msg))
+
+		self.motor_pin.off()
+		return str(rgrams), error_msg
