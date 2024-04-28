@@ -1,17 +1,25 @@
 # main.py
-version = (1, 0, 3)
+version = (2, 0, 1)
+# 2,0,1: added safeboot and flag import
 
+import flag
 from alog import espMAC, info, error, debug
 import json
 import uasyncio as asyncio
 from machine import reset
 from time import sleep
 
-def reboot():
+#safeboot
+def sb():
+	reboot(1)
+
+def reboot(boot=0):
+	flag.set('boot',boot)
 	print("REBOOTING\r\n>>> ")
-	for i in range(10):
-		print(i)
-		sleep(1)
+	if not boot:
+		for i in range(10):
+			print(i)
+			sleep(1)
 				 
 	reset()
 	while True:
@@ -56,4 +64,5 @@ mod = __import__(hostname)
 def run():
 	asyncio.run(mod.start(hostname))
 
-run()
+if flag.get('boot') == 0:
+	run()

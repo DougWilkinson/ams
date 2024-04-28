@@ -1,9 +1,10 @@
 # hass.py
 
-version = (2,0,4)
+version = (2,0,5)
 # 2,0,2: Add last will status and list to start cores
 # 2,0,3: timezone and flag support added
 # 2,0,4: hass and ntp time sync added
+# 2,0,5: added attr support if defined for device
 
 from network import WLAN, AP_IF, STA_IF
 WLAN(AP_IF).active(False)
@@ -48,6 +49,8 @@ async def publish_state(device):
 		await device.publish.wait()
 		# info("pubstate: {}, {}".format(device.name,device.state))
 		publish_queue.put(gen_topic(device,"/state"), device.state)
+		if hasattr(device, 'attr'):
+			publish_queue.put(gen_topic(device,"/attrs"), json.dumps(device.attr) )
 		device.publish.clear()
 
 def gen_topic(device, post=""):
@@ -84,6 +87,7 @@ def ha_setup(device):
 
 # Set last will device here
 state = Device('esp/{}'.format(espMAC), "unknown", ro=True, notifier_setup=ha_setup)
+state.attr = { "version": version, "mac": espMAC, "ipv4": list(wlan.ifconfig())[0]}
 
 # Subscribes and resubs when mqtt connection is lost
 async def sub():  # (re)connection.

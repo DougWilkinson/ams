@@ -7,7 +7,7 @@ from machine import RTC
 from time import localtime, time
 
 rtc = RTC()
-names = ["checksum","magic","length","log","timezone"]
+names = ["checksum","magic","length","log","timezone", "boot"]
 values = []
 
 def set(flag=None, value=1) -> None:
