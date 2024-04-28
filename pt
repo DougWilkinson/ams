@@ -1,7 +1,7 @@
 # main.py
 version = (1, 0, 3)
 
-from alog import espMAC, info, error, debug
+from alog import espMAC, info, error, debug, timezone
 import json
 import uasyncio as asyncio
 from machine import reset

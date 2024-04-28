@@ -1,23 +1,26 @@
 # hass.py
 
-version = (2,0,1)
-# 2,0,1: Add last will status and list to start cores
+version = (2,0,4)
+# 2,0,2: Add last will status and list to start cores
+# 2,0,3: timezone and flag support added
+# 2,0,4: hass and ntp time sync added
 
 from network import WLAN, AP_IF, STA_IF
 WLAN(AP_IF).active(False)
 wlan = WLAN(STA_IF)
 wlan.active(True)
 
+import flag
 import uasyncio as asyncio
 from gc import mem_free, collect
-from time import localtime, time, sleep
-from machine import RTC, reset
+from machine import RTC
 import ntptime
 from alog import espMAC, info, error, debug, started, stopped, exited
 from umqtt.simple import MQTTClient
 import json
 import mysecrets
 from msgqueue import MsgQueue
+from device import Device
 
 publish_queue = MsgQueue(15)
 
@@ -31,6 +34,7 @@ client = MQTTClient(espMAC, mysecrets.mqtt_server,
 
 client.set_last_will('hass/sensor/esp/{}/state'.format(espMAC), 'offline', retain=True)
 
+wd = asyncio.Event()
 wifi_connected = asyncio.Event()
 mqtt_connected = asyncio.Event()
 mqtt_error = asyncio.Event()		# set by pub/sub if error to trigger reconnect
@@ -78,6 +82,9 @@ def ha_setup(device):
 		subscribed_topics[gen_topic(device,"/set")] = device
 	sub_all.set()
 
+# Set last will device here
+state = Device('esp/{}'.format(espMAC), "unknown", ro=True, notifier_setup=ha_setup)
+
 # Subscribes and resubs when mqtt connection is lost
 async def sub():  # (re)connection.
 	started("sub")
@@ -86,12 +93,13 @@ async def sub():  # (re)connection.
 			await sub_all.wait()
 			await wifi_connected.wait()
 			await mqtt_connected.wait()
+			client.subscribe('hass/utc')
 			for topic in subscribed_topics:
 				if '/' in topic:
 					info('sub: {}'.format(topic) )
 					client.subscribe(topic)
 					await asyncio.sleep(1)
-			error("sub: All topics resubscribed")
+			error("sub: All topics resubscribed plus hass/utc")
 			sub_all.clear()
 		except asyncio.CancelledError:
 			stopped("sub")
@@ -100,7 +108,6 @@ async def sub():  # (re)connection.
 			# Signal mqtt reconnect
 			mqtt_connected.clear()
 			mqtt_error.set()
-	exited(pid)
 
 async def pub():
 	global publish_queue
@@ -111,7 +118,7 @@ async def pub():
 				await wifi_connected.wait()
 				await mqtt_connected.wait()
 				client.publish(topic, msg, retain=True)
-				info("pub: topic: {}".format(topic) )
+				debug("pub: topic: {}".format(topic) )
 		except asyncio.CancelledError:
 			stopped("pub")
 			return
@@ -150,13 +157,25 @@ async def wifi():
 			wlan.active(False)
 			await asyncio.sleep(1)
 			wlan.active(True)
-			debug("wifi: connected!")
+			info("wifi: connected!")
 	exited(pid)
 
 # Callback for MQTTClient
 def cb(topic, msg):
-	info('cb: topic: {}'.format(topic))
 	td = topic.decode("utf-8")
+	if td == "hass/utc":
+		j = json.loads(msg)
+		if 'UTC' in j:
+			RTC().datetime(tuple(int(i) for i in tuple(j['UTC'].split(','))))
+			# clear watchdog to skip ntp time sync
+			wd.clear()
+			debug("hass/utc: time set")
+		if "timezone" in j and (flag.get('timezone') - 24) != j['timezone']:
+				flag.set('timezone', j['timezone'] + 24 )
+				info("hass/utc: timezone set: {}".format(flag.get('timezone')) )
+		return
+
+	debug('cb: topic: {}'.format(topic))
 	if td in subscribed_topics:
 		# subscribed_topics holds the topic and device object
 		device = subscribed_topics[td]
@@ -209,24 +228,43 @@ async def mqtt():
 			mqtt_connected.set()
 			mqtt_error.clear()
 			sub_all.set()
+			state.set_state("online")
+			info("mqtt: connected")
 			await mqtt_error.wait()
 		except asyncio.CancelledError:
 			stopped("mqtt")
 			return
 		except OSError:
-			error("mqtt: connect error")
+			error("mqtt: connect OSError")
 			await asyncio.sleep(2)
 
-handlers = [ wifi, mqtt, ping, check, pub, sub ]
+async def ntp():
+	started('ntp')
+	mysecrets.ntp_servers.append(ntptime.host)
+	info("ntpsynctime: servers: {}".format(mysecrets.ntp_servers) )
+	while True:
+		while not wd.is_set():
+			wd.set()
+			await asyncio.sleep(70)
 
-async def start():
-	started("loading core modules ...")
-	# Load core modules
-	for coro in handlers:
-		asyncio.create_task(coro())
-	collect()
-	error("hass:start: awaiting core modules ..." )
-	await asyncio.sleep(5)
-		
+		for host in mysecrets.ntp_servers:
+			try:
+				debug("rtclock: trying ntp host {} ".format(host) )
+				ntptime.host = host
+				ntptime.settime()
+				debug("rtclock: success!")
+				break
+			except OSError:
+				error("ntp: Failed!")
+				continue
+		await asyncio.sleep(90)
 
-#asyncio.run(main(handlers))
+handlers = [ wifi, mqtt, ping, check, pub, sub, ntp ]
+
+info("hass: start: creating core tasks ...")
+# Load core modules
+for coro in handlers:
+	asyncio.create_task(coro())
+collect()
+info("hass:start: core tasks created ..." )
+

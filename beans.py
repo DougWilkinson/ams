@@ -1,7 +1,7 @@
 # beans.py
 
-# latest version with no display or button
-version = (2,0,0)
+# 2,0,1: hass starts on import
+version = (2,0,1)
 
 import uasyncio as asyncio
 from hx711 import HX711
@@ -22,9 +22,6 @@ dispenser = Dispenser("beans", grams="34", tray=hx.high, rgb=rgb.status, hx_aver
 button = Button("beans", pin=13, pullup=True, invert=True)
 
 async def start(hostname):
-	info("beans: Before hass.start")
-	asyncio.create_task(hass.start())
-	info("beans: after hass.start")
 	while True:
 		info("beans: grams set: {} - waiting for button".format(dispenser.grams.state))
 		await button.wait()
@@ -35,5 +32,3 @@ async def start(hostname):
 		await asyncio.sleep(4)
 		# ready to go, if tray not set, this should just skip
 		dispenser.grams.set_state(dispenser.grams.state)
-
-# asyncio.run(dispense())

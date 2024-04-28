@@ -1,17 +1,17 @@
-# rtclock.py
+# hasynctime.py
 
 version = (2,0,0)
 
 from time import localtime, time
 from machine import RTC
-import ntptime
 import json
 from device import Device
 from alog import info, error, debug, timezone
 import uasyncio as asyncio
 
-class RTClock:
-	def __init__(self, ntpservers=None, notifier_setup=None) -> None:
+heartbeat = Device("hass/utc","sensor", notifier_setup=notifier_setup) 
+
+async def start(ntpservers=None):
 		self.last_poll = 0
 		self.last_set = time()
 		# notifier is ha_setup or None
