@@ -27,5 +27,5 @@ class Device:
 	
 	def set_state(self, state, topic="state"):
 		self.q.put(topic, str(state))
-		self.state = state
+		self.state = str(state)
 		self.publish.set()

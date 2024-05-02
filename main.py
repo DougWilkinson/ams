@@ -11,15 +11,14 @@ from time import sleep
 
 #safeboot
 def sb():
-	reboot(1)
+	reboot(2)
 
-def reboot(boot=0):
+def reboot(boot=10):
 	flag.set('boot',boot)
 	print("REBOOTING\r\n>>> ")
-	if not boot:
-		for i in range(10):
-			print(i)
-			sleep(1)
+	for i in range(boot):
+		print(i)
+		sleep(1)
 				 
 	reset()
 	while True:
