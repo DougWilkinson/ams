@@ -1,7 +1,8 @@
 # ledlight.py
 
 # 2,0,0: changed to non-class based
-version = (2, 0, 0)
+# 2,0,1: multi-instance support?
+version = (2, 0, 1)
 
 
 from machine import Pin
@@ -12,15 +13,16 @@ from neopixel import NeoPixel
 from device import Device
 from hass import ha_setup
 
-bri = 10
-rgb = (0,10,10)
-last_motion = time.time()
-in_motion = False
+def clear_leds(leds):
+	leds.fill((0,0,0))
+	leds.write()
 
-def setall(leds, color=(0,0,0)):
-	if leds is None:
-		return
-	leds.fill(color)
+def set_leds(leds, s_rgb, s_bri):
+	bri = int(s_bri.state) / 255
+	r, g, b = s_rgb.state.split(",")
+	#bri = int(s_bri.state)/255
+	rgb = (int( int(r) * bri), int( int(g) * bri), int(int(b) * bri) )
+	leds.fill(rgb)
 	leds.write()
 
 # def ha_setup(device):
@@ -30,50 +32,46 @@ def setall(leds, color=(0,0,0)):
 def init(name="led", led_pin=14, num_leds=3, motion_pin=5, on_seconds=5) -> None:
 
 	state = Device(name, "OFF", dtype="light", notifier_setup=ha_setup)
-	s_bri = Device("{}_bri".format(name), str(bri), dtype="light", notifier_setup=ha_setup)
+	s_bri = Device("{}_bri".format(name), "10", dtype="light", notifier_setup=ha_setup)
 	s_rgb = Device("{}_rgb".format(name), "0,255,255", dtype="light", notifier_setup=ha_setup)
 
 	leds = NeoPixel(Pin(led_pin), num_leds)
-	setall(leds)
+	clear_leds(leds)
 
 	motion_pin = Pin(motion_pin, Pin.IN)
 	motion = Device("{}_motion".format(name), "OFF", dtype="binary_sensor", notifier_setup=ha_setup)
 
 	debug("ledlight: create tasks: {}".format(name) )
-	asyncio.create_task(state_handler(state, leds) )
-	asyncio.create_task(bri_handler(s_bri, s_rgb) )
+	asyncio.create_task(state_handler(state, leds, s_rgb, s_bri) )
+	asyncio.create_task(bri_handler(s_bri, state) )
 	asyncio.create_task(rgb_handler(s_rgb, state) )
 	asyncio.create_task(motion_handler(motion_pin, motion, on_seconds, state) )
 
-async def state_handler(state, leds):
+async def state_handler(state, leds, s_rgb, s_bri):
 	async for _ , ev in state.q:
 		debug("state ev: {}".format(ev))
 		if "ON" in ev:
-			debug("setting leds to {}".format(rgb))
-			setall(leds, rgb)
+			debug("setting leds to {}/{}".format(s_bri.state, s_rgb.state))
+			set_leds(leds, s_rgb, s_bri)
 			continue
-		setall(leds)
+		clear_leds(leds)
 
-async def bri_handler(s_bri, s_rgb):
+async def bri_handler(s_bri, state):
 	global bri
 	async for _ , ev in s_bri.q:
 		debug("bri ev: {}".format(ev))
-		bri = int(s_bri.state) / 255
 		# trigger rgb to update
-		s_rgb.set_state(s_rgb.state)
+		state.set_state(state.state)
 
 async def rgb_handler(s_rgb, state):
-	global rgb
 	async for _ , ev in s_rgb.q:
 		debug("rgb ev: {}".format(ev))
-		r, g, b = ev.split(",")
-		#bri = int(s_bri.state)/255
-		rgb = (int( int(r) * bri), int( int(g) * bri), int(int(b) * bri) )
 		# trigger led update
 		state.set_state(state.state)
 
 async def motion_handler(motion_pin, motion, on_seconds, state):
-	global last_motion, in_motion
+	last_motion = time.time()
+	in_motion = False
 	while True:
 		if motion.state == "OFF" and motion_pin.value():
 			debug("motion on")
