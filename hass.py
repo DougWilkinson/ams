@@ -47,7 +47,7 @@ async def publish_state(device):
 	started(device.name)
 	while True:
 		await device.publish.wait()
-		# info("pubstate: {}, {}".format(device.name,device.state))
+		debug("pubstate: {}, {}, pubflag: {}".format(device.name,device.state, device.publish.is_set()))
 		publish_queue.put(gen_topic(device,"/state"), device.state)
 		if hasattr(device, 'attr'):
 			publish_queue.put(gen_topic(device,"/attrs"), json.dumps(device.attr) )
@@ -70,7 +70,6 @@ def ha_setup(device):
 		msg['cmd_t'] = "~/set"
 	if device.dtype == "cover":
 		msg['cmd_t'] = "~/set"
-		msg['pos_t'] = "~_position/state"
 	if device.dtype == "light":
 		msg['cmd_t'] = "~/set"
 		msg['bri_cmd_t'] = "~_bri/set"
@@ -187,7 +186,7 @@ def cb(topic, msg):
 		device.set_state(msg.decode("utf-8"))
 		# put directly in publish_queue to be published on next await
 		device.publish.clear()
-		publish_queue.put(gen_topic(device,"/state"), device.state)
+		publish_queue.put(gen_topic(device,"/state"), device.state.lower() if device.set_lower else device.state)
 
 # ping mqtt every 30 seconds
 async def ping():

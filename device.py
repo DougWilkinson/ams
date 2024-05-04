@@ -11,7 +11,7 @@ from uasyncio import Event
 # This is usually MQTT/Homeassistant (ha_setup) from hass.py but could be extended
 
 class Device:
-	def __init__(self, name, state="", units="", ro=False, dtype="sensor", notifier_setup=None ) -> None:
+	def __init__(self, name, state="", units="", ro=False, dtype="sensor", notifier_setup=None, set_lower=False ) -> None:
 		self.name = name
 		self.dtype = dtype
 		self.state = state
@@ -21,11 +21,12 @@ class Device:
 		self.event = Event()
 		self.publish = Event()
 		self.publish.set()
+		self.set_lower = set_lower
 		if notifier_setup:
 			# call notifier with this object to setup
 			notifier_setup(self)
 	
 	def set_state(self, state, topic="state"):
-		self.q.put(topic, str(state))
+		self.q.put(topic, str(state) )
 		self.state = str(state)
 		self.publish.set()
