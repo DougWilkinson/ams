@@ -8,10 +8,10 @@ from network import WLAN, STA_IF
 import ubinascii
 from gc import mem_free
 from flag import get
-from asyncio import Event
+import uasyncio as asyncio
 import json
 
-latch = Event()
+latch = asyncio.Event()
 
 def offset_time():
 		return localtime(time() + ((get("timezone") - 24) * 3600) )
