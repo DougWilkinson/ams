@@ -296,6 +296,9 @@ async def poll(bdevice):
 	except OSError:
 		connect_error.set()
 	
+	except:
+		error("poll: other polling error mac: {}".format(bdevice.mac) )
+		
 	if bdevice.conn_handle:
 		conn_table.pop(str(bdevice.conn_handle) )
 
