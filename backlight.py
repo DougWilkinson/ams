@@ -1,6 +1,7 @@
 # backlight.py
 
-import asyncio
+version = (2, 0, 7)
+
 from alog import info, latch
 import ledlight
 import coverlimit

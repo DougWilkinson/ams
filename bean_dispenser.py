@@ -1,6 +1,6 @@
 # bean_dispenser.py
 
-import asyncio
+import uasyncio as asyncio
 from hx711 import HX711
 from tm1637 import TM1637
 from dispenser import Dispenser

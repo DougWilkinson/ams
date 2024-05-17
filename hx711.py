@@ -1,7 +1,8 @@
 # hx711.py
 # async average updates
-version = (2, 0, 0)
+version = (2, 0, 7)
 
+from alog import started
 from time import sleep_ms, sleep_us
 from machine import Pin
 import uasyncio as asyncio
@@ -13,10 +14,13 @@ def toggle(p):
 
 class HX711():
 	
-	def __init__(self, hxclock_pin=12, hxdata_pin=14, k=386, offset=0, samples=3, min=-10000, max=10000 ):
+	def __init__(self, hxclock_pin=12, hxdata_pin=14, 
+			  k=386, offset=0, samples=3, 
+			  min=-10000, max=10000, discard=1 ):
 		self.k = k
 		self.offset = offset
 		self.samples = samples
+		self.discard = discard
 		self.min = min
 		self.max = max
 		self.dataPin = Pin(hxdata_pin, Pin.IN)
@@ -39,7 +43,11 @@ class HX711():
 
 	# averages 3 values over 1 second
 	def average(self):
-		return round(sum(self.values)/ self.samples,1)
+		newcopy = self.values.copy()
+		if self.discard:
+			newcopy.sort()
+			newcopy = newcopy[self.discard:-self.discard]
+		return round(sum(newcopy)/ len(newcopy) , 1 )
 	
 	def low(self):
 		return self.lower
@@ -49,13 +57,14 @@ class HX711():
 
 	# Update samples and low/high flags
 	async def update(self):
+		started("hx_update")
 		while True:
 			# while not self.dataPin.value():
 			# 	print(self.dataPin.value())
 			# 	asyncio.sleep_ms(1)
 			# sleep_us(10)
 			raw = self.raw_read()
-			if raw < 0 or raw > 1000:
+			if raw < 0 or raw > 10000:
 				continue
 			self.values.append(raw)
 			self.values.pop(0)

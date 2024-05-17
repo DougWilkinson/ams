@@ -1,22 +1,16 @@
 # hass.py
 
-version = (2,0,5)
-# 2,0,2: Add last will status and list to start cores
-# 2,0,3: timezone and flag support added
-# 2,0,4: hass and ntp time sync added
+version = (2, 0, 7)
 # 2,0,5: added attr support if defined for device
-
-from network import WLAN, AP_IF, STA_IF
-WLAN(AP_IF).active(False)
-wlan = WLAN(STA_IF)
-wlan.active(True)
+# 2,0,6: moved wifi to main.py
+# 2,0,7: fixed attr to update on mqtt connect (after wifi connect)
 
 import flag
 import uasyncio as asyncio
 from gc import mem_free, collect
 from machine import RTC
 import ntptime
-from alog import espMAC, info, error, debug, started, stopped, exited
+from alog import wlan, wifi_connected, espMAC, info, error, debug, started, stopped, exited
 from umqtt.simple import MQTTClient
 import json
 import mysecrets
@@ -36,7 +30,7 @@ client = MQTTClient(espMAC, mysecrets.mqtt_server,
 client.set_last_will('hass/sensor/esp/{}/state'.format(espMAC), 'offline', retain=True)
 
 wd = asyncio.Event()
-wifi_connected = asyncio.Event()
+# wifi_connected = asyncio.Event()
 mqtt_connected = asyncio.Event()
 mqtt_error = asyncio.Event()		# set by pub/sub if error to trigger reconnect
 sub_all = asyncio.Event()
@@ -86,7 +80,6 @@ def ha_setup(device):
 
 # Set last will device here
 state = Device('esp/{}'.format(espMAC), "unknown", ro=True, notifier_setup=ha_setup)
-state.attr = { "version": version, "mac": espMAC, "ipv4": list(wlan.ifconfig())[0]}
 
 # Subscribes and resubs when mqtt connection is lost
 async def sub():  # (re)connection.
@@ -131,37 +124,37 @@ async def pub():
 			error('pub: Error topic {}'.format(topic))
 			await asyncio.sleep(1)
 
-# Keeps wifi connected
-# TODO: Add error handling hard reset
-async def wifi():
-	started("wifi")
-	essid = wlan.config('essid')
-	while True:
-		try:
-			while wlan.isconnected():
-				wifi_connected.set()
-				await asyncio.sleep(1)
-			await asyncio.sleep(1)
-			if wlan.isconnected():
-				continue
-			wifi_connected.clear()
-			info("wifi: connecting to {}".format(mysecrets.wifi_name))
-			if essid == '':
-				wlan.connect(mysecrets.wifi_name, mysecrets.wifi_pass)
-			else:
-				wlan.connect()
-			await asyncio.sleep(2)
-		except asyncio.CancelledError:
-			stopped("wifi")
-			return
-		except:
-			error("wifi: error, hard reset")
-			wlan.disconnect()
-			wlan.active(False)
-			await asyncio.sleep(1)
-			wlan.active(True)
-			info("wifi: connected!")
-	exited(pid)
+# # Keeps wifi connected
+# # TODO: Add error handling hard reset
+# async def wifi():
+# 	started("wifi")
+# 	essid = wlan.config('essid')
+# 	while True:
+# 		try:
+# 			while wlan.isconnected():
+# 				wifi_connected.set()
+# 				await asyncio.sleep(1)
+# 			await asyncio.sleep(1)
+# 			if wlan.isconnected():
+# 				continue
+# 			wifi_connected.clear()
+# 			info("wifi: connecting to {}".format(mysecrets.wifi_name))
+# 			if essid == '':
+# 				wlan.connect(mysecrets.wifi_name, mysecrets.wifi_pass)
+# 			else:
+# 				wlan.connect()
+# 			await asyncio.sleep(2)
+# 		except asyncio.CancelledError:
+# 			stopped("wifi")
+# 			return
+# 		except:
+# 			error("wifi: error, hard reset")
+# 			wlan.disconnect()
+# 			wlan.active(False)
+# 			await asyncio.sleep(1)
+# 			wlan.active(True)
+# 			info("wifi: connected!")
+# 	exited(pid)
 
 # Callback for MQTTClient
 def cb(topic, msg):
@@ -221,11 +214,13 @@ async def check():
 # Maintain MQTTclient connection, reconnect if flagged as bad
 # TODO: "test" if server is available using sockets
 async def mqtt():
+	global state
 	started("mqtt")
 	client.set_callback(cb)
 	while True:
 		try:
 			await wifi_connected.wait()
+			state.attr = { "version": version, "mac": espMAC, "ipv4": list(wlan.ifconfig())[0]}
 			client.connect(clean_session=True)
 			client.ping()
 			mqtt_connected.set()
@@ -262,7 +257,7 @@ async def ntp():
 				continue
 		await asyncio.sleep(90)
 
-handlers = [ wifi, mqtt, ping, check, pub, sub, ntp ]
+handlers = [ mqtt, ping, check, pub, sub, ntp ]
 
 info("hass: start: creating core tasks ...")
 # Load core modules

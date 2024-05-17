@@ -1,11 +1,10 @@
 #air.py
 
-version = (2,0,0)
+version = (2,0,7)
 # async version
 
 from alog import debug, info, error
 from device import Device
-import ubinascii
 from hass import ha_setup
 
 class WP6003:
