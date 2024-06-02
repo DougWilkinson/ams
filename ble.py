@@ -1,10 +1,12 @@
 # ble.py
 
-version = (2,0,0)
+version = (2,0,7)
 # async version of BLE from modsensor version
+# fixed import
 
 import bluetooth
-import ubinascii, time
+import ubinascii
+import time
 from machine import reset
 from alog import debug, info, error
 import uasyncio as asyncio
