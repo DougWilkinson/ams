@@ -1,5 +1,7 @@
 # device.py
-version = (2,0,0)
+version = (2,0,9)
+# 209: always put value in q in set_state
+
 from msgqueue import MsgQueue
 from uasyncio import Event
 
@@ -30,7 +32,7 @@ class Device:
 			notifier_setup(self)
 	
 	def set_state(self, state, topic="state"):
+		self.q.put(topic, str(state) )
 		if self.state != str(state):
-			self.q.put(topic, str(state) )
 			self.state = str(state)
 			self.publish.set()

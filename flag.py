@@ -1,13 +1,13 @@
 # flag.py
 
-version = (2, 0, 1)
-# 2,0,0: timezone aware, removed offset_time
+version = (2, 0, 2)
+# 202: added minutes/hours to track time updated
 
 from machine import RTC
 from time import localtime, time
 
 rtc = RTC()
-names = ["checksum","magic","length","log","timezone", "boot"]
+names = ["checksum","magic","length","log","timezone", "boot", "timesynced"]
 values = []
 
 def set(flag=None, value=1) -> None:
@@ -15,11 +15,13 @@ def set(flag=None, value=1) -> None:
 		values[names.index(flag)] = value
 		values[0] = sum(values[1:]) & 255
 		rtc.memory(bytes(values))
+	return
+
+def show():
 	line = "Bootvalues: "
 	for i in names:
 		line += "{}={} ".format(i,get(i))
 	print(line)
-	return
 
 def clear(flag):
 	if flag in names:
@@ -39,4 +41,4 @@ else:
 	set('log',7)
 	set('timezone',19)
 
-set()
+show()

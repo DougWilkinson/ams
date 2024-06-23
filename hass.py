@@ -1,22 +1,22 @@
 # hass.py
 
-version = (2, 0, 7)
-# 2,0,5: added attr support if defined for device
-# 2,0,6: moved wifi to main.py
-# 2,0,7: fixed attr to update on mqtt connect (after wifi connect)
+version = (2, 0, 11)
+# 2010: fixed state online not publishing
+# 2011: added flag set to track time updates
 
 import flag
 import uasyncio as asyncio
-from gc import mem_free, collect
+from gc import collect
 from machine import RTC
 import ntptime
-from alog import wlan, wifi_connected, espMAC, info, error, debug, started, stopped, exited
+from alog import wlan, wifi_connected, espMAC, info, error, debug, started, stopped, hostname
 from umqtt.simple import MQTTClient
 import json
 import mysecrets
 from msgqueue import MsgQueue
 from device import Device
 
+flag.clear("timesynced")
 publish_queue = MsgQueue(15)
 
 haconfig_topic = mysecrets.ha_config_prefix + "/{}/{}/config"
@@ -29,7 +29,7 @@ client = MQTTClient(espMAC, mysecrets.mqtt_server,
 
 client.set_last_will('hass/sensor/esp/{}/state'.format(espMAC), 'offline', retain=True)
 
-wd = asyncio.Event()
+mqtt_time_lost = asyncio.Event()
 # wifi_connected = asyncio.Event()
 mqtt_connected = asyncio.Event()
 mqtt_error = asyncio.Event()		# set by pub/sub if error to trigger reconnect
@@ -73,6 +73,9 @@ def ha_setup(device):
 
 	publish_queue.put(haconfig_topic.format(device.dtype, device.name ), json.dumps(msg) )
 	asyncio.create_task(publish_state(device))
+	ha_sub(device)
+	
+def ha_sub(device):
 	# add msgqueue to dict for callback handling
 	if not device.ro:
 		subscribed_topics[gen_topic(device,"/set")] = device
@@ -163,8 +166,11 @@ def cb(topic, msg):
 		j = json.loads(msg)
 		if 'UTC' in j:
 			RTC().datetime(tuple(int(i) for i in tuple(j['UTC'].split(','))))
+			# flag.set("hour", RTC().datetime()[4])
+			# flag.set("minute", RTC().datetime()[5])
 			# clear watchdog to skip ntp time sync
-			wd.clear()
+			mqtt_time_lost.clear()
+			flag.set("timesynced")
 			debug("hass/utc: time set")
 		if "timezone" in j and (flag.get('timezone') - 24) != j['timezone']:
 				flag.set('timezone', j['timezone'] + 24 )
@@ -220,13 +226,14 @@ async def mqtt():
 	while True:
 		try:
 			await wifi_connected.wait()
-			state.attr = { "version": version, "mac": espMAC, "ipv4": list(wlan.ifconfig())[0]}
+			state.attr = { "hostname": hostname, "version": version, "mac": espMAC, "ipv4": list(wlan.ifconfig())[0]}
 			client.connect(clean_session=True)
 			client.ping()
 			mqtt_connected.set()
 			mqtt_error.clear()
 			sub_all.set()
-			state.set_state("online")
+			state.set_state('online')
+			state.publish.set()
 			info("mqtt: connected")
 			await mqtt_error.wait()
 		except asyncio.CancelledError:
@@ -241,21 +248,25 @@ async def ntp():
 	mysecrets.ntp_servers.append(ntptime.host)
 	info("ntpsynctime: servers: {}".format(mysecrets.ntp_servers) )
 	while True:
-		while not wd.is_set():
-			wd.set()
+		while not mqtt_time_lost.is_set():
+			mqtt_time_lost.set()
 			await asyncio.sleep(70)
 
 		for host in mysecrets.ntp_servers:
+			flag.clear("timesynced")
 			try:
 				debug("rtclock: trying ntp host {} ".format(host) )
 				ntptime.host = host
 				ntptime.settime()
+				# flag.set("hour", RTC().datetime()[4])
+				# flag.set("minute", RTC().datetime()[5])
 				debug("rtclock: success!")
+				flag.set("timesynced")
 				break
 			except OSError:
 				error("ntp: Failed!")
 				continue
-		await asyncio.sleep(90)
+		await asyncio.sleep(70)
 
 handlers = [ mqtt, ping, check, pub, sub, ntp ]
 

@@ -17,7 +17,8 @@ class Tray:
 		self.invert = invert
 		self.pin = Pin(pin, Pin.IN)
 		# force first read
-		self.tray = Device(name, self.read_pin(), dtype="binary_sensor", notifier=ha_setup)
+		self.tray = Device(name, "", dtype="binary_sensor", notifier_setup=ha_setup)
+		self.read_pin()
 		self._on = asyncio.Event()
 		self._off = asyncio.Event()
 		if self.tray.state:
@@ -37,17 +38,17 @@ class Tray:
 			while self.read_pin():
 				await asyncio.sleep(1)
 			info("tray is off")
-			self.tray.publish.set()
 			self._on.clear()
 			self._off.set()
 			await asyncio.sleep(1)
 			while not self.read_pin():
 				await asyncio.sleep(1)
 			info("tray is on")
-			self.tray.publish.set()
 			self._on.set()
 			self._off.clear()
 			await asyncio.sleep(1)
 
 	def read_pin(self):
-		return (not self.pin.value()) if self.invert else (self.pin.value() > 0)
+		value = (not self.pin.value()) if self.invert else (self.pin.value() > 0)
+		self.tray.set_state("ON" if value else "OFF")
+		return value

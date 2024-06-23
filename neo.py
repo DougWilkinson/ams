@@ -1,4 +1,4 @@
-# ledmatrix.py
+# neo.py
 
 # 2,1,0: ledmatrix to async
 version = (2,1,0)
@@ -12,6 +12,7 @@ from matrixclock import MatrixClock
 clock = asyncio.Event()
 text = asyncio.Event()
 display = MatrixClock("matrixclock", pin=13, num_leds=255, clock_trig=clock, text_trig=text)
+display.clock = (0,2,2)
 
 async def start(hostname):
 	info("matrixclock: hostname")

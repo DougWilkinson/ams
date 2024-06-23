@@ -1,8 +1,9 @@
 # ble.py
 
-version = (2,0,7)
-# async version of BLE from modsensor version
-# fixed import
+version = (2,0,10)
+# 2 0 8: split scan to allow sleep(.1) to fix ctrl-c from netrepl
+# 2 0 9: convert to bytes before putting into result for adv_data
+# 2010: added exception checking in ble_loop
 
 import bluetooth
 import ubinascii
@@ -95,22 +96,28 @@ async def ble_loop():
 	asyncio.create_task(handle_result())
 	asyncio.create_task(handle_connect())
 	while True:
-		info("ble_loop: scanning 60 seconds")
-		ble.gap_scan(60000,30000,30000,True)		
-		debug("before await scan done")
-		await ble_scan_done.wait()
-		debug("ble_loop: polling cycle")
-		for mac, bdevice in polled_devices.items():
-			# Only poll devices, not signatures
-			if hasattr(bdevice, 'mac'):
-				await asyncio.gather(poll(bdevice) )
+		try:
+			info("ble_loop: scanning 60 seconds in 6 intervals")
+			for t in range(6):
+				ble.gap_scan(10000,30000,30000,True)		
+				await ble_scan_done.wait()
+				time.sleep(.1)
+			debug("ble_loop: polling cycle")
+			for mac, bdevice in polled_devices.items():
+				# Only poll devices, not signatures
+				if hasattr(bdevice, 'mac'):
+					await asyncio.gather(poll(bdevice) )
+		except OSError:
+			error("OSError during ble_loop")
+		except:
+			error("Unknown Error in ble_loop")
 
 async def handle_result():
 	global result
 	async for mac, data in result:
 		try:
-			addr_type, addr, connectable, rssi, adv_data = data
-			bdata = bytes(adv_data)
+			addr_type, addr, connectable, rssi, bdata = data
+			# bdata = bytes(adv_data)
 			oui = mac[0:6]
 			#debug("handle_result: received")
 			
@@ -185,7 +192,7 @@ def callback(event, data):
 	if event == _ISRESULT:
 		addr_type, addr, connectable, rssi, adv_data = data
 		mac = ubinascii.hexlify(bytes(addr)).decode()
-		result.put(mac, (addr_type, bytes(addr), connectable, rssi, adv_data))
+		result.put(mac, (addr_type, bytes(addr), connectable, rssi, bytes(adv_data)))
 		#debug("cb: ISRESULT: mac {}".format(mac))		
 
 	elif event == _IPCONN:

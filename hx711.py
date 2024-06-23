@@ -1,16 +1,15 @@
 # hx711.py
+version = (2, 0, 8)
 # async average updates
-version = (2, 0, 7)
+# comment using gain = 128 as default
+# remove native decorator to allow compilation
 
 from alog import started
 from time import sleep_ms, sleep_us
 from machine import Pin
 import uasyncio as asyncio
-
-@micropython.native
-def toggle(p):
-	p.value(1)
-	p.value(0)
+from natives import toggle
+from machine import enable_irq, disable_irq
 
 class HX711():
 	
@@ -77,6 +76,7 @@ class HX711():
 		# 	pass
 		# sleep_us(10)
 		my = 0
+		d = disable_irq()
 		for idx in range(24):
 			toggle(self.pdsckPin)
 			data = self.dataPin.value()
@@ -84,7 +84,9 @@ class HX711():
 				neg = data
 			else:
 				my = ( my << 1) | data
+		# one read = gain of 128
 		toggle(self.pdsckPin)
+		enable_irq(d)
 		if neg: my = my - (1<<23)
 		return my/self.k + self.offset
 

@@ -23,18 +23,17 @@ defaults = {"pd_sck": 14,
 			}
 
 class TM1637:
-	def __init__(self, name, data_pin=0, clock_pin=4, brightness=2, speed=180 ):
+	def __init__(self, name, data_pin=0, clock_pin=4, brightness="2", speed="180" ):
 		started(name)
 		self.dio = Pin(data_pin, Pin.OUT, value=0)
 		self.clk = Pin(clock_pin, Pin.OUT, value=0)
 		sleep_us(DELAY)
-		self.brightness = brightness
-		self.set_brightness(self.brightness)
+		self.set_brightness(brightness)
 		self._write_data_cmd()
 		self._write_dsp_ctrl()
 
-		self.string = Device(name + "/string", "    ", dtype="sensor", notifier=ha_setup)
-		self.brightness = Device(name + "/brightness", brightness, dtype="sensor", notifier=ha_setup)
+		self.string = Device(name + "/string", "    ", dtype="sensor", notifier_setup=ha_setup)
+		self.brightness = Device(name + "/brightness", brightness, dtype="sensor", notifier_setup=ha_setup)
 
 		# self.string = Device("string", "hello -- ")
 		# self.brightness = Device("brightness", brightness)
@@ -42,23 +41,19 @@ class TM1637:
 		self.speed = Device("speed", speed)
 		self.colon = False
 		asyncio.create_task(self._display())
-		asyncio.create_task(self._string(self.string.setstate) )
-		asyncio.create_task(self._brightness(self.brightness.setstate))
+		asyncio.create_task(self._string(self.string.q) )
+		asyncio.create_task(self._brightness(self.brightness.q))
 		
 	async def _string(self, queue):
 		async for _ , msg in queue:
 			if len(msg) > 0 and msg[0] == ":":
 				self.string.state = msg[1:]
 				self.colon = True
-			else:
-				self.string.state = msg
-			self.string.event.set()
-			self.string.publish.set()
 
 	async def _brightness(self, queue):
 		async for _ , msg in queue:
-			self.brightness.state = int(msg)
-			self.brightness.publish.set()
+			# self.brightness.state = int(msg)
+			# self.brightness.publish.set()
 			# update it
 			self.set_brightness(self.brightness.state)
 			
@@ -67,7 +62,7 @@ class TM1637:
 		last = ""
 		while True:
 			try:
-				await asyncio.sleep_ms(self.speed.state)
+				await asyncio.sleep_ms(int(self.speed.state))
 
 				# If string changes, reset start
 				if self.string.event.is_set():
@@ -148,6 +143,7 @@ class TM1637:
 	def set_brightness(self, val=None):
 		if val is None:
 			return self._bright
+		val = int(val)
 		if not 0 <= val <= 7:
 			return
 

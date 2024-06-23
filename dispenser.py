@@ -1,6 +1,8 @@
 # dispenser.py
 
-version = (2, 0, 0)
+version = (2, 0, 8)
+# 2 0 7: grams.set_state(0) to fix same value issue
+# 208: rgb status fix
 
 from time import sleep_ms
 from machine import Pin
@@ -13,7 +15,7 @@ class Dispenser():
 
 	# display = alphanumeric display device is "string"
 	# rgb = neopixel status values = "glow_green", "red_pulse", "busy"
-	def __init__(self, name, display=None, rgb=None, grams="34", tray=None, motor_pin=5, hx_average=None ):
+	def __init__(self, name, display=None, rgb=None, grams="0", tray=None, motor_pin=5, hx_average=None ):
 		self.motor_pin = Pin(motor_pin, Pin.OUT)
 		self.motor_pin.off()
 		started(name)
@@ -44,13 +46,16 @@ class Dispenser():
 	async def _dispense_grams(self):
 		async for _, msg in self.grams.q:
 			info("dispenser: activate: msg: {}".format(msg))
+			self.grams.set_state(0)
 			#self.activate.set_state("OFF")
 			#print("activate: ", self.activate.state, self.activate.publish.is_set())
 			try:
 				grams = int(msg)
 			except ValueError:
+				error("error converting grams value to int")
 				continue
-			self.rgb_status.set_state("steady")
+			if self.rgb_status:
+				self.rgb_status.set_state("steady")
 			self.actual, self.error = await self.measure(grams)
 			if self.error:
 				if self.display:
@@ -62,22 +67,26 @@ class Dispenser():
 				if self.display:
 					self.display.set_state(self.actual )
 				if self.rgb_status:
-					if self.grams.state == "17":
+					if grams == 17:
 						self.rgb_status.set_state("glow_one")
-					if self.grams.state == "34":
+					if grams == 34:
 						self.rgb_status.set_state("glow_two")
 			info("dispenser: waiting for tray off")
 			while self.tray():
 				await asyncio.sleep(1)
+			self.grams.set_state(0)
+
 	
 	async def _tray_status(self):
 			while True:
 				info("dispenser: tray on - hx: {}".format(self.hx_average() ) )
-				self.rgb_status.set_state("glow_green")
+				if self.rgb_status:
+					self.rgb_status.set_state("glow_green")
 				while self.tray():
 					await asyncio.sleep(1)
 				info("dispenser: tray off - hx: {}".format(self.hx_average() ) )
-				self.rgb_status.set_state("pulse_red")
+				if self.rgb_status:
+					self.rgb_status.set_state("pulse_red")
 				while not self.tray():
 					await asyncio.sleep(1)
 			

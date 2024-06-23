@@ -1,15 +1,19 @@
 # backlight.py
 
-version = (2, 0, 7)
+version = (2, 0, 9)
+# 208: converted to class version LedMotion
+# 209: added superclass cover/limit
 
 from alog import info, latch
-import ledlight
-import coverlimit
+from ledmotion import LedMotion
+from encoderstepper import CoverEncoder
+from binary import Binary
 
 # hardware is initialized (set pins, etc)
 
-ledlight.init("backlight")
-coverlimit.init("backdisc",invert_limit=True)
+motion = Binary("workspace_motion", pin=5, invert=False)
+led = LedMotion("backlight", trigger=motion, led_pin=14, num_leds=3, on_seconds=15)
+cover = CoverEncoder(name="backdisc", max_steps=3, timeout_ms=5000, backoff_steps=1)
 
 async def start(hostname):
 		await latch.wait()

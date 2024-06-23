@@ -2,8 +2,8 @@
 
 version = (2, 0, 7)
 
-from machine import RTC
-from time import localtime, time
+from machine import RTC, Pin
+from time import localtime, time, sleep
 from network import WLAN, STA_IF
 from ubinascii import hexlify
 from gc import mem_free
@@ -12,6 +12,22 @@ import uasyncio as asyncio
 from json import loads, dumps
 
 latch = asyncio.Event()
+
+async def blink():
+	statusled = Pin(2, Pin.OUT, 0)
+	# 200 is wifi not connected
+	status = 200
+	while True:
+		statusled.value(0)
+		await asyncio.sleep_ms(status)
+		statusled.value(1)
+		await asyncio.sleep_ms(status)
+		sleep(.05)
+		if wlan.isconnected():
+			status = 3000
+		else:
+			status = 200
+
 wifi_connected = asyncio.Event()
 
 def offset_time():
@@ -83,3 +99,5 @@ def info(msg, lev=2, color='\u001b[0m', end="\n"):
 		print("{}{:02d}:{:02d}:{:02d}: {}: {}: {}{}".format( color,
 			dt[3], dt[4], dt[5], mem_free(), hostname, 
 			msg, "\u001b[0m" ), end=end )
+
+asyncio.create_task(blink())
