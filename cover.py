@@ -7,7 +7,7 @@ from machine import Pin
 import time
 from alog import info, error, debug, load_config, save_json
 from device import Device
-import asyncio
+import uasyncio as asyncio
 from hass import ha_setup
 
 class Cover:

@@ -28,6 +28,7 @@ class HX711():
 		self.values = [0, ] * samples
 		self.lower = False
 		self.higher = False
+		self.last_average = 0
 		self.powerup()
 		asyncio.create_task(self.update())
 
@@ -42,11 +43,12 @@ class HX711():
 
 	# averages 3 values over 1 second
 	def average(self):
-		newcopy = self.values.copy()
-		if self.discard:
-			newcopy.sort()
-			newcopy = newcopy[self.discard:-self.discard]
-		return round(sum(newcopy)/ len(newcopy) , 1 )
+		return self.last_average
+		# newcopy = self.values.copy()
+		# if self.discard:
+		# 	newcopy.sort()
+		# 	newcopy = newcopy[self.discard:-self.discard]
+		# return round(sum(newcopy)/ len(newcopy) , 1 )
 	
 	def low(self):
 		return self.lower
@@ -67,8 +69,15 @@ class HX711():
 				continue
 			self.values.append(raw)
 			self.values.pop(0)
-			self.lower = True if self.average() < self.min else False
-			self.higher = True if self.average() > self.max else False
+			stable = True
+			for v in self.values[:-1]:
+				if abs(v-raw) > 10:
+					stable = False
+					break
+			if stable:
+				self.last_average = round( sum(self.values)/ len(self.values), 1 )					
+				self.lower = True if self.last_average < self.min else False
+				self.higher = True if self.last_average > self.max else False
 			await asyncio.sleep_ms(300)
 
 	def raw_read(self):

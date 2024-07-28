@@ -1,14 +1,11 @@
 # scale.py
 
-version = (2, 0, 7)
-# was testbed
+version = (2, 0, 8)
+# 208: fixed name
 
 import uasyncio as asyncio
-from alog import started, info
-# notifier is hass
-import hass
+from hass import ha_setup
 from device import Device
-from time import sleep
 
 # hardware is initialized (set pins, etc)
 #hx=HX711(hxclock_pin=12, hxdata_pin=14, k=386)
@@ -17,7 +14,7 @@ from time import sleep
 
 class Scale():
 	def __init__(self, name, hx, diff) -> None:
-		scale = Device("testbed_scale", "0", "hx", notifier_setup=hass.ha_setup, publish=False)
+		scale = Device(name, "0", "hx", notifier_setup=ha_setup, publish=False)
 		asyncio.create_task(self.update(scale, hx, diff))	
 	
 	async def update(self, scale, hx, diff):

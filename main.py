@@ -5,12 +5,13 @@ version = (2, 0, 9)
 import flag
 from alog import wlan, wifi_connected, info, error, started, stopped, hostname, espMAC
 import uasyncio as asyncio
-from machine import reset
+from machine import reset, freq
 from time import sleep
 from mysecrets import wifi_name, wifi_pass
 from network import WLAN, AP_IF, STA_IF
 import uhashlib
 import ubinascii
+import webrepl
 
 def genhash(file):
 	file_hash = uhashlib.sha256()
@@ -23,7 +24,7 @@ def genhash(file):
 
 WLAN(AP_IF).active(False)
 
-info("hostname: {}".format(hostname) )
+info("hostname: {} ({})".format(hostname, freq()) )
 
 wlan.active(True)
 # sleep to stop from rebooting constantly on esp32?
@@ -107,4 +108,9 @@ def run():
 	asyncio.run(mod.start(hostname))
 
 if flag.get('boot') != 2:
+	if flag.get('boot') == 1:
+		delay = 30
+		while delay > 0 and webrepl.client_s is None:
+			sleep(1)
+			delay -= 1
 	run()
