@@ -14,7 +14,7 @@ from hass import ha_setup
 
 class Analog:
 
-	def __init__(self, name, pin=None, poll_seconds=60, k=159.3, units="v"):
+	def __init__(self, name, pin=None, diff=0.3, poll_seconds=60, k=159.3, units="v"):
 		if 'esp32' in platform:
 			if pin:
 				self.adc = ADC(Pin(pin))
@@ -24,13 +24,17 @@ class Analog:
 			self.adc = ADC(0)
 		
 		self.k = k
+		self.diff = diff
+		self.last_value = -1
 		self.analog = Device(name, "0", units=units, notifier_setup=ha_setup)
 		if poll_seconds:
 			asyncio.create_task(self.adc_handler(poll_seconds) )			
 
 	def adc_read(self) -> float:
 		val = round(self.adc.read()/self.k,2)
-		self.analog.set_state(val)
+		if abs(self.last_value - val) > self.diff:
+			self.last_value = val
+			self.analog.set_state(val)
 		return val
 
 	async def adc_handler(self, poll_seconds):

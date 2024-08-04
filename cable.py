@@ -14,12 +14,14 @@ class Cable:
 	# probe_pin: connected through cable to test connectedness
 	# used to pulse and read ADC value
 	# adc_read = function that returns a voltage from ADC
-	# 
+	# Connected - voltage ~ 1-2 v
+	# not connected voltage > 3 v
 	def __init__(self, name, probe_pin, adc_read, 
 				adc_poll_ms=100, k=159.3,
-				adc_diff=0.1, threshold=4.89642 ):
+				adc_diff=0.1, threshold=3.5 ):
 		self.k = k
 		self.adc_read = adc_read
+		self.adc_poll_ms = adc_poll_ms
 		# probe must have both probe pin and disable pin to work
 		self.probe_pin = Pin(probe_pin, Pin.OUT)
 		self.threshold = threshold
@@ -31,7 +33,8 @@ class Cable:
 		sleep_ms(1)
 		volts = self.adc_read()
 		self.probe_pin.value(0)
-		if volts < self.threshold:
+		# off if > threshold, on if < threshold
+		if volts > self.threshold:
 			return False
 		else:
 			return True

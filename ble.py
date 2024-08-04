@@ -1,9 +1,10 @@
 # ble.py
 
-version = (2,0,10)
+version = (2,0,11)
 # 2 0 8: split scan to allow sleep(.1) to fix ctrl-c from netrepl
 # 2 0 9: convert to bytes before putting into result for adv_data
 # 2010: added exception checking in ble_loop
+# 2011: callback: connection: save bytes(addr) instead of "addr"
 
 import bluetooth
 import ubinascii
@@ -24,6 +25,7 @@ _IGDRESULT = const(13)
 _IGRRESULT = const(15)
 _IGNOTIFY = const(18)
 _IGIND = const(19)
+_IRQ_CONNECTION_UPDATE = const(27)
 
 
 ble_connect = MsgQueue(1)
@@ -159,7 +161,7 @@ async def handle_connect():
 		try:
 			conn_handle, addr_type, addr = data
 			debug("handle_connect: mac={}, connhandle={}, addr_t={}, addr={}".format(mac, conn_handle, addr_type,
-								ubinascii.hexlify(bytes(addr)).decode()) )
+								ubinascii.hexlify(addr).decode()) )
 			# set conn_handle
 			polled_devices[mac].conn_handle = conn_handle
 			# add to table for later lookup
@@ -187,6 +189,8 @@ def updatedevice(self, handle, value_handle=None, notify_data=None ):
 def callback(event, data):
 	global ble_connect
 	global result
+	global ble_scan_done
+
 	# Maintain list of devices and queue data received
 
 	if event == _ISRESULT:
@@ -198,7 +202,7 @@ def callback(event, data):
 	elif event == _IPCONN:
 		conn_handle, addr_type, addr = data
 		mac = ubinascii.hexlify(bytes(addr)).decode()
-		ble_connect.put(mac, (conn_handle, addr_type, addr) )
+		ble_connect.put(mac, (conn_handle, addr_type, bytes(addr) ) )
 		debug("cb: IPCONN: mac {}".format(mac))
 
 	elif event == _IRQ_SCAN_DONE:
@@ -251,6 +255,10 @@ def callback(event, data):
 	elif event == _IGCDONE:
 		# conn_handle, value_handle, notify_data = data
 		debug("ble cb: gattc indicate: {}".format(data) )
+	elif event == _IRQ_CONNECTION_UPDATE:
+		# The remote device has updated connection parameters.
+		conn_handle, conn_interval, conn_latency, supervision_timeout, status = data
+		debug("cb: conn_upd: c_handle={}, c_interval={}, c_latency={}, super_timeout={}, status={}".format(conn_handle, conn_interval, conn_latency, supervision_timeout, status))
 	else:
 		info("ble:cb: unknown event#: {}".format(event))
 
@@ -272,7 +280,7 @@ async def poll(bdevice):
 		# when connected, conn_table and conn_handle are set
 		# in handle_connect Coro
 		await asyncio.wait_for(bdevice.connected.wait(), 5)
-	
+
 		# connected, send discover (step 2)
 		debug("poll: sending discover characteristic {} to: {}".format(ubinascii.hexlify(bdevice.uuid), bdevice.mac) )
 		bdevice.received = asyncio.ThreadSafeFlag()
@@ -281,10 +289,9 @@ async def poll(bdevice):
 		await asyncio.wait_for(bdevice.received.wait(), 5)
 				
 		# found service, send write command to query
-		debug("poll: sending write conn_handle = {}\n value_handle = {}\n write_value {}\n type {}".format(bdevice.conn_handle, bdevice.value_handle, bdevice.write_value, type(bdevice.write_value) ) )
+		debug("poll: sending write c_handle = {}, v_handle = {}, wr_val {}".format(bdevice.conn_handle, bdevice.value_handle, bdevice.write_value ) )
 		bdevice.received = asyncio.ThreadSafeFlag()
 		ble.gattc_write(bdevice.conn_handle, bdevice.value_handle, bytes([bdevice.write_value]))
-		debug("After gattc_write")
 		# wait 10 seconds for service
 		await asyncio.wait_for(bdevice.received.wait(), 5)
 
