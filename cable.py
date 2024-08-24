@@ -3,7 +3,7 @@
 version = (2,0,0)
 
 import uasyncio as asyncio
-from alog import debug
+from core import debug
 from machine import Pin
 from time import sleep_ms, ticks_diff, ticks_ms
 from device import Device

@@ -2,7 +2,7 @@
 
 version = (2, 0, 8)
 
-from alog import started, latch
+from core import started, latch
 from hx711 import HX711
 from scale import Scale
 

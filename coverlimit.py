@@ -5,7 +5,7 @@ version = (2,0,10)
 
 from machine import Pin
 import time
-from alog import info, error, debug, load_config, save_json
+from core import info, error, debug, load_config, save_json
 from device import Device
 import asyncio
 from hass import ha_setup

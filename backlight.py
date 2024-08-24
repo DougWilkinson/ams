@@ -4,7 +4,7 @@ version = (2, 0, 9)
 # 208: converted to class version LedMotion
 # 209: added superclass cover/limit
 
-from alog import info, latch
+from core import info, latch
 #from ledmotion import LedMotion
 from encoderstepper import CoverEncoder
 from binary import Binary

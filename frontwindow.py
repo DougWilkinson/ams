@@ -2,7 +2,7 @@
 
 version = (2, 0, 0)
 
-from alog import info, latch
+from core import info, latch
 from encoderstepper import CoverEncoder
 
 # hardware is initialized (set pins, etc)

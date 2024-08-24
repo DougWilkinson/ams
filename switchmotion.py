@@ -4,7 +4,7 @@ version = (2, 0, 4)
 
 from machine import Pin
 import time
-from alog import info, debug, error
+from core import info, debug, error
 import uasyncio as asyncio
 from device import Device
 from hass import ha_setup

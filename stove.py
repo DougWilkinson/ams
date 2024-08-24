@@ -6,7 +6,7 @@ import uasyncio as asyncio
 from dht import DHT22
 from machine import Pin
 import dhtx
-from alog import started, latch
+from core import started, latch
 # notifier is hass
 from hass import ha_setup
 from device import Device

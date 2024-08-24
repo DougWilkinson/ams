@@ -5,7 +5,7 @@ version = (2, 0, 0)
 # 209: added superclass cover/limit
 
 from machine import SPI
-from alog import info, latch
+from core import info, latch
 from ili9341 import Ili9341
 from xglcd_font import XglcdFont
 from oledclock import OLEDClock

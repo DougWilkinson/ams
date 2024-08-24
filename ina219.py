@@ -7,7 +7,7 @@ import uasyncio as asyncio
 from machine import Pin
 from device import Device
 from hass import ha_setup
-from alog import error, debug
+from core import error, debug
 
 safe_current = asyncio.Event()
 safe_current.set()

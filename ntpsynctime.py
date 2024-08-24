@@ -5,7 +5,7 @@ version = (2,0,0)
 from time import localtime, time
 from machine import RTC
 import ntptime
-from alog import info, error
+from core import info, error
 import uasyncio as asyncio
 
 rtc = RTC()

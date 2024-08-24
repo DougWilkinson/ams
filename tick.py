@@ -8,7 +8,7 @@ version = (2,0,0)
 from device import Device
 from machine import Pin, PWM
 from time import ticks_us, sleep, time, ticks_diff
-from alog import error, debug
+from core import error, debug
 from hass import ha_setup
 import uasyncio as asyncio
 

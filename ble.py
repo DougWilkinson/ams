@@ -1,16 +1,15 @@
 # ble.py
 
-version = (2,0,11)
-# 2 0 8: split scan to allow sleep(.1) to fix ctrl-c from netrepl
-# 2 0 9: convert to bytes before putting into result for adv_data
+version = (2,0,12)
 # 2010: added exception checking in ble_loop
 # 2011: callback: connection: save bytes(addr) instead of "addr"
+# 2012: added exception handling in callback
 
 import bluetooth
 import ubinascii
 import time
 from machine import reset
-from alog import debug, info, error
+from core import debug, info, error
 import uasyncio as asyncio
 from msgqueue import MsgQueue
 
@@ -99,12 +98,12 @@ async def ble_loop():
 	asyncio.create_task(handle_connect())
 	while True:
 		try:
-			info("ble_loop: scanning 60 seconds in 6 intervals")
+			info("ble_loop: scanning - found {} devices".format(len(scanned_devices) ) )
 			for t in range(6):
 				ble.gap_scan(10000,30000,30000,True)		
 				await ble_scan_done.wait()
 				time.sleep(.1)
-			debug("ble_loop: polling cycle")
+			info("ble_loop: polling {} device".format(len(polled_devices) ) )
 			for mac, bdevice in polled_devices.items():
 				# Only poll devices, not signatures
 				if hasattr(bdevice, 'mac'):
@@ -158,6 +157,7 @@ async def handle_result():
 async def handle_connect():
 	global ble_connect
 	async for mac, data in ble_connect:
+		debug("handle_connect: {}".format(mac) )
 		try:
 			conn_handle, addr_type, addr = data
 			debug("handle_connect: mac={}, connhandle={}, addr_t={}, addr={}".format(mac, conn_handle, addr_type,
@@ -195,15 +195,21 @@ def callback(event, data):
 
 	if event == _ISRESULT:
 		addr_type, addr, connectable, rssi, adv_data = data
-		mac = ubinascii.hexlify(bytes(addr)).decode()
-		result.put(mac, (addr_type, bytes(addr), connectable, rssi, bytes(adv_data)))
-		#debug("cb: ISRESULT: mac {}".format(mac))		
+		try:
+			mac = ubinascii.hexlify(bytes(addr)).decode()
+			result.put(mac, (addr_type, bytes(addr), connectable, rssi, bytes(adv_data)))
+			#debug("cb: ISRESULT: mac {}".format(mac))		
+		except:
+			error("_isresult: error handling {}".format(addr))
 
 	elif event == _IPCONN:
 		conn_handle, addr_type, addr = data
-		mac = ubinascii.hexlify(bytes(addr)).decode()
-		ble_connect.put(mac, (conn_handle, addr_type, bytes(addr) ) )
-		debug("cb: IPCONN: mac {}".format(mac))
+		try:
+			mac = ubinascii.hexlify(bytes(addr)).decode()
+			ble_connect.put(mac, (conn_handle, addr_type, bytes(addr) ) )
+			debug("cb: IPCONN: mac {}".format(mac))
+		except:
+			error("_ipconn: error handling {}".format(addr))
 
 	elif event == _IRQ_SCAN_DONE:
 		ble_scan_done.set()
@@ -212,11 +218,14 @@ def callback(event, data):
 	elif event == _IPDISC:
 		# Connected peripheral has disconnected.
 		conn_handle, addr_type, addr = data
-		mac = ubinascii.hexlify(bytes(addr)).decode()
-		debug("cb: IPDISC: mac {}, addr {}".format(mac, bytes(addr) ) )
-		if mac in polled_devices:
-			polled_devices[mac].disconnect.set()
-		debug("cb: IPDISC: mac {}".format(mac))
+		try:
+			mac = ubinascii.hexlify(bytes(addr)).decode()
+			debug("cb: IPDISC: mac {}, addr {}".format(mac, bytes(addr) ) )
+			if mac in polled_devices:
+				polled_devices[mac].disconnect.set()
+			debug("cb: IPDISC: mac {}".format(mac))
+		except:
+			error("_ipdisc: error handling {}".format(addr))
 
 	elif event == _IGSRESULT:
 		# Called for each service found by gattc_discover_services().
@@ -260,7 +269,7 @@ def callback(event, data):
 		conn_handle, conn_interval, conn_latency, supervision_timeout, status = data
 		debug("cb: conn_upd: c_handle={}, c_interval={}, c_latency={}, super_timeout={}, status={}".format(conn_handle, conn_interval, conn_latency, supervision_timeout, status))
 	else:
-		info("ble:cb: unknown event#: {}".format(event))
+		error("ble:cb: unknown event#: {}".format(event))
 
 # use create_task to poll ble device using this Coro
 async def poll(bdevice):
@@ -273,7 +282,7 @@ async def poll(bdevice):
 		
 		bdevice.received = asyncio.ThreadSafeFlag()
 		time.sleep(1)
-		info("poll: connecting to: mac: {}, addr: {}".format( bdevice.mac, bytes(bdevice.addr) ) )
+		debug("poll: connecting to: mac: {}, addr: {}".format( bdevice.mac, bytes(bdevice.addr) ) )
 		ble.gap_connect(0, bdevice.addr, 2000)
 
 		# wait for 10 seconds for reply
@@ -296,7 +305,7 @@ async def poll(bdevice):
 		await asyncio.wait_for(bdevice.received.wait(), 5)
 
 		# If data received, send to eventbus and remove from device instance
-		info("poll: updating data for: {}".format(bdevice.mac) )
+		debug("poll: updating data for: {}".format(bdevice.mac) )
 		bdevice.device.update(bdevice.notify_data)
 		
 		debug("poll: disconnecting device: {}".format(bdevice.mac) )

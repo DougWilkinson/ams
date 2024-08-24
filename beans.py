@@ -9,7 +9,7 @@ from hx711 import HX711
 from dispenser import Dispenser
 from rgbstatus import RGBStatus
 # from button import Button
-from alog import info, latch
+from core import info, latch
 # notifier is hass
 import hass
 

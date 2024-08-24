@@ -4,7 +4,7 @@ version = (2,0,0)
 # first async version used with ble.py
 
 import struct
-from alog import debug, info, error
+from core import debug, info, error
 from device import Device
 from hass import ha_setup
 

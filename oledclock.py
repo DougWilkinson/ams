@@ -10,7 +10,7 @@ import array
 import math
 import json
 import uasyncio as asyncio
-from alog import debug, offset_time
+from core import debug, offset_time
 from random import randint
 
 class OLEDClock:

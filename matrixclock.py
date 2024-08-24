@@ -5,7 +5,7 @@ version = (2,1,0)
 
 # text displayed based on values, not when sent from mqtt
 from time import time, ticks_diff, ticks_ms, sleep_ms
-from alog import debug, info, error, offset_time
+from core import debug, info, error, offset_time
 from random import getrandbits
 from device import Device
 from machine import Pin

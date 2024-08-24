@@ -5,7 +5,7 @@ version = (1, 0, 0)
 
 from machine import Pin
 import time
-from alog import info, error, debug
+from core import info, error, debug
 from device import Device
 import asyncio
 from main import load_config

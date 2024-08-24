@@ -3,7 +3,7 @@
 version = (2, 0, 7)
 # 2,0,0: non-class version
 
-from alog import started, error
+from core import started, error
 from device import Device
 import uasyncio as asyncio
 from hass import ha_setup

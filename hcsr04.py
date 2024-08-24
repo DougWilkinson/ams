@@ -5,7 +5,7 @@ version = (1,0,0)
 
 from machine import Pin
 from time import sleep_us, ticks_us
-from alog import info, debug, error, started, stopped, exited
+from core import info, debug, error, started, stopped, exited
 import asyncio
 from device import Device
 from hass import ha_setup

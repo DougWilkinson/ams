@@ -3,7 +3,7 @@
 version = (2, 0, 9)
 # 208: broke into scale.py and this file
 
-from alog import started, info, latch
+from core import started, info, latch
 from hx711 import HX711
 from scale import Scale
 

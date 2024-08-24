@@ -7,7 +7,7 @@ version = (2, 0, 1)
 
 from machine import Pin
 import time
-from alog import info, debug
+from core import info, debug
 import asyncio
 from neopixel import NeoPixel
 from device import Device

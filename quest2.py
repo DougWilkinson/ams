@@ -2,7 +2,7 @@
 
 version = (2,0,0)
 
-from alog import error, latch
+from core import error, latch
 from machine import Pin, I2C
 
 from ina219 import INA219

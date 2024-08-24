@@ -4,7 +4,7 @@
 version = (2,1,0)
 
 import uasyncio as asyncio
-from alog import info, offset_time
+from core import info, offset_time
 # notifier is hass
 import hass
 from matrixclock import MatrixClock

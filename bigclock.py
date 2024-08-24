@@ -2,7 +2,7 @@
 
 version = (2, 0, 0)
 
-from alog import info, latch
+from core import info, latch
 from ledclock import LEDClock
 from binary import Binary
 

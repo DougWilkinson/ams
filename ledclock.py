@@ -4,7 +4,7 @@ version = (2, 0, 0)
 # async version
 
 import time
-from alog import offset_time, debug, started
+from core import offset_time, debug, started
 from machine import Pin, RTC
 from neopixel import NeoPixel
 import uasyncio as asyncio

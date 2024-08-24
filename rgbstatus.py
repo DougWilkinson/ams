@@ -3,7 +3,7 @@
 version = (2,0,0)
 
 import time
-from alog import info, debug, started
+from core import info, debug, started
 from device import Device
 from hass import ha_setup
 import uasyncio as asyncio

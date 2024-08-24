@@ -4,7 +4,7 @@ version = (2, 0, 8)
 # comment using gain = 128 as default
 # remove native decorator to allow compilation
 
-from alog import started
+from core import started
 from time import sleep_ms, sleep_us
 from machine import Pin
 import uasyncio as asyncio

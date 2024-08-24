@@ -2,7 +2,7 @@
 
 from time import sleep_us
 from machine import Pin
-from alog import error, stopped, started
+from core import error, stopped, started
 from device import Device
 from hass import ha_setup
 import asyncio

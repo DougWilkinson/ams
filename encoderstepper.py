@@ -5,7 +5,7 @@ version = (2,0,11)
 
 from machine import Pin
 import time
-from alog import info, error, debug, load_config, save_json
+from core import info, error, debug, load_config, save_json
 from device import Device
 import uasyncio as asyncio
 from hass import ha_setup
@@ -19,7 +19,7 @@ class CoverEncoder(Cover):
 		super().__init__(name=name, 
 				enable_pin=enable_pin, step_pin=step_pin, dir_pin=dir_pin, 
 				delay=delay, backoff_steps=backoff_steps, max_steps=max_steps)
-		self.enc_pin = Pin(enc_pin)
+		self.enc_pin = Pin(enc_pin, Pin.IN)
 		self.timeout = timeout_ms
 		self.encoder_state = 0
 		self.moved_steps = 0

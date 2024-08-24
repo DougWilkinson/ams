@@ -6,7 +6,7 @@ version = (2, 0, 8)
 
 from time import sleep_ms
 from machine import Pin
-from alog import info, started, error
+from core import info, started, error
 from device import Device
 from hass import ha_setup
 import uasyncio as asyncio

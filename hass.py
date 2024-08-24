@@ -9,7 +9,7 @@ import uasyncio as asyncio
 from gc import collect
 from machine import RTC
 import ntptime
-from alog import wlan, wifi_connected, espMAC, info, error, debug, started, stopped, hostname
+from core import wlan, wifi_connected, espMAC, info, error, debug, started, stopped, hostname
 from umqtt.simple import MQTTClient
 import json
 import mysecrets
