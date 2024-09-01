@@ -1,4 +1,6 @@
 # blemon1.py
+from versions import versions
+versions[__name__] = 3
 
 from ble import init_poll_for, init_scan_for, ble_loop
 from air import WP6003

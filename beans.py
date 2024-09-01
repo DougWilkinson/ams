@@ -1,8 +1,7 @@
 # beans.py
 
-# 2,0,1: hass starts on import
-version = (2,0,7)
-# 2 0 7: set grames init to "0"
+from versions import versions
+versions[__name__] = 3
 
 import uasyncio as asyncio
 from hx711 import HX711

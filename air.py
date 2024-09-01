@@ -1,7 +1,7 @@
 #air.py
 
-version = (2,0,7)
-# async version
+from versions import versions
+versions[__name__] = 3
 
 from core import debug, info, error
 from device import Device

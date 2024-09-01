@@ -1,7 +1,8 @@
 #bigclock2.py
 # testing esp32-s2 on upython v1.23
 
-version = (2, 0, 0)
+from versions import versions
+versions[__name__] = 3
 
 from core import latch, hostname
 #from ledclock import LEDClock

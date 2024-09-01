@@ -1,6 +1,7 @@
 # cover.py
 
-version = (2,0,11)
+from versions import versions
+versions[__name__] = 3
 # 2011: Super class for limit and encoder
 
 from machine import Pin

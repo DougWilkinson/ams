@@ -1,6 +1,9 @@
 # ili9341.py
 # LCD/Touch module.
 
+from versions import versions
+versions[__name__] = 3
+
 from time import sleep
 from math import cos, sin, pi, radians
 from framebuf import FrameBuffer, RGB565  # type: ignore

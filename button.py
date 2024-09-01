@@ -1,6 +1,7 @@
 # button.py
 
-version = (1,0,0)
+from versions import versions
+versions[__name__] = 3
 
 from machine import Pin
 import time

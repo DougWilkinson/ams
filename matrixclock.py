@@ -1,6 +1,7 @@
 # matrixclock.py
 
-version = (2,1,0)
+from versions import versions
+versions[__name__] = 3
 # 2,1,0: converted from modsensor
 
 # text displayed based on values, not when sent from mqtt

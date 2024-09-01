@@ -1,6 +1,8 @@
 # flag.py
 
-version = (2, 0, 2)
+from versions import versions
+versions[__name__] = 3
+
 # 202: added minutes/hours to track time updated
 
 from machine import RTC

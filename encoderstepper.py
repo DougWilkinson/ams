@@ -1,6 +1,7 @@
 # encoderstepper.py
 
-version = (2,0,11)
+from versions import versions
+versions[__name__] = 3
 # 2011: cover encoder class with superclass Cover
 
 from machine import Pin

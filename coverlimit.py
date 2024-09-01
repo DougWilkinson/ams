@@ -1,6 +1,7 @@
 # coverlimit.py
 
-version = (2,0,10)
+from versions import versions
+versions[__name__] = 3
 # 2010: back to Class generated with chatgpt
 
 from machine import Pin

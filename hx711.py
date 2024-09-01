@@ -1,5 +1,8 @@
 # hx711.py
-version = (2, 0, 8)
+
+from versions import versions
+versions[__name__] = 3
+
 # async average updates
 # comment using gain = 128 as default
 # remove native decorator to allow compilation

@@ -1,6 +1,7 @@
 #toyclock.py
 
-version = (2, 0, 0)
+from versions import versions
+versions[__name__] = 3
 
 from core import info, latch
 from ledclock import LEDClock

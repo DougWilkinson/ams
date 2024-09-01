@@ -1,6 +1,7 @@
 # stove.py
 
-version = (2, 0, 7)
+from versions import versions
+versions[__name__] = 3
 
 import uasyncio as asyncio
 from dht import DHT22

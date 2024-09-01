@@ -1,5 +1,8 @@
 # device.py
-version = (2,0,9)
+
+from versions import versions
+versions[__name__] = 3
+
 # 209: always put value in q in set_state
 
 from msgqueue import MsgQueue

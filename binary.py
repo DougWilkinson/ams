@@ -1,6 +1,7 @@
 # binary.py
 
-version = (2,0,0)
+from versions import versions
+versions[__name__] = 3
 # 200: revised to work with ledlight/ledmotion
 
 from machine import Pin

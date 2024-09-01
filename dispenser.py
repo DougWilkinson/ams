@@ -1,6 +1,7 @@
 # dispenser.py
 
-version = (2, 0, 8)
+from versions import versions
+versions[__name__] = 3
 # 2 0 7: grams.set_state(0) to fix same value issue
 # 208: rgb status fix
 

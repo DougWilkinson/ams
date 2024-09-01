@@ -1,6 +1,7 @@
 # govee5074.py
 
-version = (2,0,0)
+from versions import versions
+versions[__name__] = 3
 # first async version used with ble.py
 
 import struct

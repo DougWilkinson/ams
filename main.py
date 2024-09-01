@@ -1,6 +1,7 @@
 # main.py
-version = (2, 0, 9)
-# 209: genhash use uhashlib/ubinascii
+
+from versions import versions
+versions[__name__[2:-2]] = 3
 
 import flag
 from core import info, error, started, stopped

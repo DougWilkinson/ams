@@ -1,7 +1,8 @@
 # analog.py
 # used with charger.py
 
-version = (2,0,8)
+from versions import versions
+versions[__name__] = 3
 
 import uasyncio as asyncio
 from sys import platform

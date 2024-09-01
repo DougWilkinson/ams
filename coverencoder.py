@@ -1,6 +1,7 @@
 #stepper.py
 
-version = (1, 0, 0)
+from versions import versions
+versions[__name__] = 3
 # async version
 
 from machine import Pin

@@ -1,6 +1,7 @@
 #ledclock.py
 
-version = (2, 0, 0)
+from versions import versions
+versions[__name__] = 3
 # async version
 
 import time
@@ -10,7 +11,6 @@ from neopixel import NeoPixel
 import uasyncio as asyncio
 from rgblight import RGBlight
 from flag import get
-from machine import Timer
 
 time_known = asyncio.Event()
 # hand_index is a map to translate 0-12 to the starting led#
@@ -26,9 +26,10 @@ class LEDClock:
 		# (250, 1000, 875, 375) FastLED
 		self.leds.timing = (350,800,800,350)
 		self.leds.fill((0,0,0))
-		self.refresh = True
-		self.timer = Timer(-1)
-		self.timer.init(period=50, callback=self.refresh_leds)
+		self.leds.write()
+		# self.refresh = True
+		# self.timer = Timer(-1)
+		# self.timer.init(period=50, callback=self.refresh_leds)
 		# Set color of outer edge leds or "None"
 		self.face_rgb = face_rgb
 		self.hand_rgb = hand_rgb
@@ -46,11 +47,11 @@ class LEDClock:
 		asyncio.create_task(self.rgb_handler())
 		#asyncio.create_task(self.flash_red())
 
-	# ISR to write leds
-	def refresh_leds(self, id):
-		if self.refresh:
-			self.leds.write()
-			self.refresh = False
+	# # ISR to write leds
+	# def refresh_leds(self, id):
+	# 	if self.refresh:
+	# 		self.leds.write()
+	# 		self.refresh = False
 
 	# merge led with new color, if 0 color, keep led color
 	def merge_led(self, index, color):
@@ -69,6 +70,7 @@ class LEDClock:
 				bri = int(self.mqtt_rgb.s_bri.state)
 			else:
 				bri = 0
+				
 			#bri = int(s_bri.state)/255
 			self.hand_rgb = ( bri, bri, bri )
 			self.refresh_hands()
@@ -86,11 +88,11 @@ class LEDClock:
 			debug("time not set!")
 			for i in range(12):
 				self.leds[self.edge_index[i]] = ( self.hand_rgb[0], 0, 0 )
-			self.refresh=True
+			self.leds.write()
 			await asyncio.sleep_ms(500)
 			for i in range(12):
 				self.leds[self.edge_index[i]] = ( 0, 0, 0 )
-			self.refresh=True
+			self.leds.write()
 			await asyncio.sleep_ms(500)
 
 	async def handle_seconds(self):
@@ -99,13 +101,16 @@ class LEDClock:
 		last_displayed = 0
 		# Draw second hand
 		while True:
+			color = self.hand_rgb[2]
+			if color == 0:
+				await asyncio.sleep(1)
+				continue
 			sec = int(RTC().datetime()[6]/5)
 			#if (last_displayed < 5 and last_displayed > sec) or last_displayed == sec or not get("timesynced"):
 			if (last_displayed < 5 and last_displayed > sec) or last_displayed == sec:
 				await asyncio.sleep_ms(100)
 				continue
 			last_displayed = sec
-			color = self.hand_rgb[2]
 			delay = int(2000/color)
 			for brighter in range(color):
 				# fade out last second
@@ -116,7 +121,7 @@ class LEDClock:
 					self.merge_led(self.edge_index[lastsec], (0, 0, color - brighter - 1 ) )
 				# fade in new second
 				self.merge_led(self.edge_index[sec], (0, 0, brighter + 1))
-				self.refresh=True
+				self.leds.write()
 				await asyncio.sleep_ms(delay)
 			lastled = self.edge_index[lastsec]
 			# self.leds[lastled] = (self.leds[lastled][0], self.leds[lastled][1], self.face_rgb[2] )
@@ -146,6 +151,8 @@ class LEDClock:
 			self.refresh_hands()
 
 	def refresh_hands(self):			
+		if self.hand_rgb == (0,0,0):
+			return
 		self.leds.fill((0,0,0))
 		for i in self.edge_index:
 			self.leds[i] = self.face_rgb
@@ -173,4 +180,4 @@ class LEDClock:
 		if self.always_on:
 			self.leds[self.always_on]= (self.hand_rgb[0],0,0)
 
-		self.refresh=True
+		self.leds.write()

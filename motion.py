@@ -1,7 +1,8 @@
 # motion.py
 
 # 2,0,0: started separate from ledlight
-version = (2, 0, 7)
+from versions import versions
+versions[__name__] = 3
 
 
 from machine import Pin

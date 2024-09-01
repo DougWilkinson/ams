@@ -1,6 +1,7 @@
 # ble.py
 
-version = (2,0,12)
+from versions import versions
+versions[__name__] = 3
 # 2010: added exception checking in ble_loop
 # 2011: callback: connection: save bytes(addr) instead of "addr"
 # 2012: added exception handling in callback

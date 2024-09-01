@@ -1,6 +1,7 @@
 # rgblight.py
 
-version = (2, 0, 0)
+from versions import versions
+versions[__name__] = 3
 # 200: taken from ledlight to break out light.rgb only
 
 from device import Device

@@ -1,9 +1,12 @@
-# alog.py
+# core.py
 
-version = (2, 0, 10)
+from versions import versions
+versions[__name__] = 3
+
 # 2010: renamed alog.py to core.py, moved a lot out of main to here
 
 from machine import RTC, Pin, reset, freq
+#from platform import platform
 from time import localtime, time, sleep
 from network import WLAN, STA_IF
 from gc import mem_free
@@ -14,6 +17,7 @@ from mysecrets import wifi_name, wifi_pass
 from network import WLAN, AP_IF, STA_IF
 import uhashlib
 import ubinascii
+import uos as os
 
 try:
 	import webrepl
@@ -48,7 +52,10 @@ def offset_time():
 WLAN(AP_IF).active(False)
 
 espMAC = str(ubinascii.hexlify(WLAN().config('mac')).decode() )
+versions["mac"] = espMAC
 rtc = RTC()
+versions["freq"] = freq() / 1000000
+#versions['mpy'] = platform().split('-')[1]
 
 def load_config(name=espMAC, instance="run"):
 	try:
@@ -74,6 +81,8 @@ try:
 	hostname = load_config()
 except:
 	hostname = espMAC
+
+versions["hostname"] = hostname
 
 # log = 0 no output,1+=error 3+=info 5+=debug
 def debug(msg, value=""):
@@ -106,12 +115,19 @@ async def webrepl_status():
 		# wait until webrepl connection is no longer established
 		webrepl_connected.set()
 		info("webrepl_status: connected")
-		while hasattr(webrepl.client_s, "fileno") and webrepl.client_s.fileno() > 0:
+		is_connected = os.dupterm(None)
+		#while hasattr(webrepl.client_s, "fileno") and webrepl.client_s.fileno() > 0:
+		while is_connected:
+			os.dupterm(is_connected)
 			await asyncio.sleep(10)
+			is_connected = os.dupterm(None)
 		info("webrepl_status: not connected - disabling output")
 		webrepl_connected.clear()
-		while not hasattr(webrepl.client_s, "fileno") or webrepl.client_s.fileno() < 0:
+		#while not hasattr(webrepl.client_s, "fileno") or webrepl.client_s.fileno() < 0:
+		while not is_connected:
 			await asyncio.sleep(1)
+			is_connected = os.dupterm(None)
+		os.dupterm(is_connected)
 
 #########################
 # Turn on wifi (initial)
@@ -178,6 +194,7 @@ async def wifi():
 		try:
 			while wlan.isconnected():
 				wifi_connected.set()
+				versions["ipv4"] = list(wlan.ifconfig())[0]
 				await asyncio.sleep(1)
 			await asyncio.sleep(1)
 			if wlan.isconnected():

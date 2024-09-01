@@ -1,4 +1,6 @@
 # bean_dispenser.py
+from versions import versions
+versions[__name__] = 3
 
 import uasyncio as asyncio
 from hx711 import HX711

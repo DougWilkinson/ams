@@ -1,6 +1,7 @@
 # ina219.py
 
-version = (2,0,9)
+from versions import versions
+versions[__name__] = 3
 # 209: requires device object to use .pin attribute
 
 import uasyncio as asyncio

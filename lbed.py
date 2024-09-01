@@ -1,6 +1,7 @@
 # lbed.py
 
-version = (2, 0, 8)
+from versions import versions
+versions[__name__] = 3
 
 from core import started, latch
 from hx711 import HX711

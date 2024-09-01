@@ -1,6 +1,7 @@
 # scale.py
 
-version = (2, 0, 9)
+from versions import versions
+versions[__name__] = 3
 # 209: added periodic publish and self.scale
 
 import uasyncio as asyncio

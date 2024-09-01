@@ -1,8 +1,7 @@
 # backlight.py
 
-version = (2, 0, 9)
-# 208: converted to class version LedMotion
-# 209: added superclass cover/limit
+from versions import versions
+versions[__name__] = 3
 
 from core import info, latch
 #from ledmotion import LedMotion

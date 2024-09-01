@@ -1,7 +1,8 @@
 # neo.py
 
 # 2,1,0: ledmatrix to async
-version = (2,1,0)
+from versions import versions
+versions[__name__] = 3
 
 import uasyncio as asyncio
 from core import info, offset_time

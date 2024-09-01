@@ -1,6 +1,7 @@
 # ledlight.py
 
-version = (2, 0, 4)
+from versions import versions
+versions[__name__] = 3
 # 203: changed to trigger for lights on (any class with a state object)
 # 204: ha_sub for _bri and _rgb
 

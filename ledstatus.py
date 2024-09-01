@@ -1,6 +1,7 @@
 # ledstatus.py
 
-version = (1,0,3)
+from versions import versions
+versions[__name__] = 3
 
 from machine import Pin
 from time import ticks_ms, ticks_diff, sleep_ms
