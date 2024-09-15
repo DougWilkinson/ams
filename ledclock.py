@@ -70,11 +70,12 @@ class LEDClock:
 				bri = int(self.mqtt_rgb.s_bri.state)
 			else:
 				bri = 0
-				
+				self.leds.fill((0,0,0))
+				self.leds.write()
 			#bri = int(s_bri.state)/255
 			self.hand_rgb = ( bri, bri, bri )
 			self.refresh_hands()
-
+			
 	def draw_hand(self,h,length,color,tail=0):
 		for i in range(self.hand_index[h]-(self.direction_index[h]*tail),self.hand_index[h]+(self.direction_index[h]*length),self.direction_index[h]):
 			self.merge_led(i, color)

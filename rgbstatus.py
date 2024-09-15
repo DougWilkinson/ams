@@ -15,7 +15,6 @@ class RGBStatus:
 	
 	def __init__(self, name, pin=15, num_leds=3, brightness=15, min_brightness=5, urgent_ms=500,
 			  glow_ms=1500):
-		self.version = version
 		self.leds = NeoPixel(Pin(pin), num_leds)
 		self.setall()
 		self.brightness = brightness

@@ -14,12 +14,15 @@ from hass import ha_setup
 class Cover:
 	def __init__(self, name="cover", enable_pin=12, step_pin=13, dir_pin=15, 
 				 delay=1250, backoff_steps=300, max_steps=1000):
+		
+		saved = {'state': 'CLOSE', 'position': 0}
+		
 		try:
-			state = load_config("cover.{}".format(name))
+			saved = load_config("cover.{}".format(name))
 		except:
-			state = {'state': 'CLOSE', 'position': 0}
+			pass
 
-		self.state = Device(name, state['state'], dtype="cover", notifier_setup=ha_setup, set_lower=True)
+		self.state = Device(name, saved['state'], dtype="cover", notifier_setup=ha_setup, set_lower=True)
 		self.enable_pin = Pin(enable_pin, Pin.OUT)
 		self.enable_pin.value(1)
 		self.dir_pin = Pin(dir_pin, Pin.OUT)
@@ -32,6 +35,7 @@ class Cover:
 		self.moved_steps = 0
 		#used for encoder timeout, must be reset on each move
 		self.last_tick = time.ticks_ms()
+		asyncio.create_task(self.move())
 
 	def onestep(self):
 		self.step_pin.value(1)

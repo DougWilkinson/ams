@@ -25,6 +25,8 @@ try:
 except:
 	webrepl_loaded = False
 
+use_wifi = asyncio.Event()
+use_wifi.set()
 wifi_connected = asyncio.Event()
 webrepl_connected = asyncio.Event()
 # start as connected for booting
@@ -190,7 +192,7 @@ async def wifi():
 	started("wifi")
 	essid = wlan.config('essid')
 	retries = 0
-	while True:
+	while use_wifi.is_set():
 		try:
 			while wlan.isconnected():
 				wifi_connected.set()
@@ -221,8 +223,9 @@ async def wifi():
 			await asyncio.sleep(1)
 			wlan.active(True)
 			info("wifi: connected!")
-	exited(pid)
-
+	exited("wifi disabled")
+	wlan.disconnect()
+	wlan.active(False)
 
 def offset_time():
 	return localtime(time() + ((flag.get("timezone") - 24) * 3600) )

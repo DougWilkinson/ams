@@ -43,7 +43,8 @@ async def publish_state(device):
 	while True:
 		await device.publish.wait()
 		debug("pubstate: {}, {}, pubflag: {}".format(device.name,device.state, device.publish.is_set()))
-		publish_queue.put(gen_topic(device,"/state"), device.state)
+		publish_queue.put(gen_topic(device,"/state"), device.state.lower() if device.set_lower else device.state)
+
 		if hasattr(device, 'attr'):
 			publish_queue.put(gen_topic(device,"/attrs"), json.dumps(device.attr) )
 		device.publish.clear()
