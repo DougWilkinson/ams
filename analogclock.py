@@ -1,4 +1,4 @@
-# touchmeds2.py
+# analogclock.py
 
 from versions import versions
 versions[__name__] = 3
@@ -27,7 +27,7 @@ weather.set_state(blank)
 spi = SPI(1, baudrate=8888888, sck=6, mosi=11, miso=10)
 display = Ili9341(spi, rotation=180, cs=7, dc=5, rst=4)
 font = XglcdFont('Lucida_Console18x29.c',18,29)
-oledclock = BlitClock("touchmeds",  oled=display, color=63488, text=weather, font=font )
+oledclock = BlitClock("analogclock",  oled=display, color=63488, text=weather, font=font )
 
 async def start(hostname):
 		await latch.wait()

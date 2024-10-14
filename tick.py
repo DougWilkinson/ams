@@ -24,8 +24,8 @@ class Tick:
 
 		# do first to stop random pwm motion
 		self.pause_pwm = PWM(Pin(pause_pin), freq=50, duty=47)
-		self.pause_pwm.freq(1)
-		self.pause_pwm.duty(0)
+		#self.pause_pwm.freq(1)
+		#self.pause_pwm.duty(0)
 
 		# Set from HA when correction needed
 		self.pause_seconds = Device(name + "_pause", "0", units="seconds", notifier_setup=ha_setup )

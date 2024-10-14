@@ -56,6 +56,10 @@ class Cover:
 		debug("cover state: {}".format(self.state.state))
 		async for _, ev in self.state.q:
 			debug("cover: {} -> {}".format(current_state, ev))
+			
+			if "OPEN" not in ev and "CLOSE" not in ev:
+				continue
+			
 			if self.state.state == current_state:
 				continue
 

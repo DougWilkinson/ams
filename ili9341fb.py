@@ -178,11 +178,7 @@ class Ili9341(FrameBuffer):
 		self.clear()
 		self.display_off()
 		self.spi.deinit()
-		print('display off')
-
-	def fill(self, color):
-		pass
-	
+		print('display off')	
 
 	def show(self):
 		self.block(0, 0, self.width-1, self.height-1, self.buffer)
@@ -256,13 +252,13 @@ class Ili9341(FrameBuffer):
 			if landscape:
 				# Fill in spacing
 				if spacing:
-					self.fill_hrect(x, y - w - spacing, h, spacing, background)
+					self.rect(x, y - w - spacing, h, spacing, background)
 				# Position y for next letter
 				y -= (w + spacing)
 			else:
 				# Fill in spacing
 				if spacing:
-					self.fill_hrect(x + w, y, spacing, h, background)
+					self.rect(x + w, y, spacing, h, background)
 				# Position x for next letter
 				x += (w + spacing)
 
