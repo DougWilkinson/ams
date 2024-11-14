@@ -18,7 +18,7 @@ from msgqueue import MsgQueue
 from device import Device
 
 flag.clear("timesynced")
-publish_queue = MsgQueue(15)
+publish_queue = MsgQueue(50)
 
 haconfig_topic = mysecrets.ha_config_prefix + "/{}/{}/config"
 topic__template = mysecrets.ha_topic_prefix + "/{}/{}"

@@ -100,7 +100,7 @@ class Ili9341(FrameBuffer):
 	}
 
 	def __init__(self, spi, cs=16, dc=4, rst=17,
-				 width=240, height=320, rotation=0):
+				 width=240, height=320, rotation=0, backlight=9):
 		"""Initialize OLED.
 			spi (Class Spi):  SPI interface for OLED
 			cs (Class Pin):  Chip select pin
@@ -122,7 +122,6 @@ class Ili9341(FrameBuffer):
 		self.cs.init(self.cs.OUT, value=1)
 		self.dc.init(self.dc.OUT, value=0)
 		self.rst.init(self.rst.OUT, value=1)
-		self.reset = self.reset_mpy
 		self.write_cmd = self.write_cmd_mpy
 		self.write_data = self.write_data_mpy
 		self.reset()
@@ -159,6 +158,8 @@ class Ili9341(FrameBuffer):
 
 		self.clear()
 
+		self.backlight = Pin(backlight, Pin.OUT)
+
 	def block(self, x0, y0, x1, y1, data):
 		"""Write a block of data to display.
 			x0 (int):  Starting X position.
@@ -192,11 +193,12 @@ class Ili9341(FrameBuffer):
 	def display_off(self):
 		"""Turn display off."""
 		self.write_cmd(self.DISPLAY_OFF)
+		self.backlight.off()
 
 	def display_on(self):
 		"""Turn display on."""
 		self.write_cmd(self.DISPLAY_ON)
-
+		self.backlight.on()
 
 	def draw_letter(self, x, y, letter, font, color, background=0,
 					landscape=False):
@@ -346,7 +348,7 @@ class Ili9341(FrameBuffer):
 		with open(path, "rb") as f:
 			return f.read(buf_size)
 
-	def reset_mpy(self):
+	def reset(self):
 		self.rst(0)
 		sleep(.05)
 		self.rst(1)

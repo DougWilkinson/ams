@@ -1,7 +1,7 @@
 # blitclock.py
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 4
 # 200: async version with oled type in params
 
 from time import sleep_ms, ticks_ms
@@ -13,13 +13,15 @@ import json
 import uasyncio as asyncio
 from core import debug, offset_time
 from random import randint
+from device import Device
+from hass import ha_setup
 
 class BlitClock:
 	
-	def __init__(self, name, oled, color=31, width=None, height=None, radius_factor=0.84, text=None, font=None, hand=5, effect="centered" ):
-		self.oled = oled
-		self.width = width if width else self.oled.width
-		self.height = height if height else self.oled.height
+	def __init__(self, name, display, color=31, width=None, height=None, radius_factor=0.84, text=None, font=None, hand=5, effect="centered" ):
+		self.display = display
+		self.width = width if width else self.display.width
+		self.height = height if height else self.display.height
 		# start with center of oled
 		self.cx = self.width >> 1
 		self.cy = self.height >> 1
@@ -35,8 +37,19 @@ class BlitClock:
 		self.m_hand_fb = FrameBuffer(bytearray(self.width * self.height * 2), self.width, self.height, RGB565 )
 		self.h_hand_fb = FrameBuffer(bytearray(self.width * self.height * 2), self.width, self.height, RGB565 )
 		self.seconds_color = 63488
+		self.onoff = Device(name, state="ON", dtype="switch", notifier_setup=ha_setup)
+
+		asyncio.create_task(self.onoff_handler())
 		asyncio.create_task(self.clock_handler())
 		asyncio.create_task(self.text_handler())
+
+	async def onoff_handler(self):
+		async for _ , ev in self.onoff.q:
+			debug("onoff: {}".format(ev) )
+			if 'OFF' in ev:
+				self.display.display_off()
+			else:
+				self.display.display_on()
 
 	async def text_handler(self):
 		async for _, ev in self.text.q:
@@ -71,8 +84,8 @@ class BlitClock:
 
 	def draw_face(self, color=0):
 		self.face_fb.fill(0)
-		# self.oled.draw_text(239-(len(self.outside_temp.value )*18), 0, str(self.outside_temp.value), self.lucida, 63488)
-		# self.oled.draw_text(0, 291, self.weather.value, self.lucida, 63488)
+		# self.display.draw_text(239-(len(self.outside_temp.value )*18), 0, str(self.outside_temp.value), self.lucida, 63488)
+		# self.display.draw_text(0, 291, self.weather.value, self.lucida, 63488)
 		#self.draw_text()
 		for i in range(12):
 			self.face_fb.ellipse(self.cx + round(self.clock_radius * math.sin(math.radians(i*30))),
@@ -85,7 +98,7 @@ class BlitClock:
 	# 		self.update_hand(self.h_hand, angle_hour, cx, cy, fraction = 0.6, width=self.hand, color=self.color)
 	# 		self.update_hand(self.m_hand, angle_minute, cx, cy, fraction=0.9, width=self.hand, color=self.color)
 	# 		self.update_hand(self.s_hand, second_angle, cx, cy, fraction=0.8, color=self.color)
-	# 		self.oled.show()
+	# 		self.display.show()
 
 
 	async def clock_handler(self):
@@ -124,11 +137,11 @@ class BlitClock:
 				angle_second = second * 6 + ( i * 2)
 				self.update_hand(self.s_hand_fb, angle_second, fraction=0.8, color=self.color)
 				self.draw_text(self.s_hand_fb, 60, 190, "{}:{:0>2}:{:0>2}".format(hour,minute,second), 63)
-				self.oled.blit(self.face_fb, 0, 0)
-				self.oled.blit(self.h_hand_fb, 0, 0, 0)
-				self.oled.blit(self.m_hand_fb, 0, 0, 0)
-				self.oled.blit(self.s_hand_fb, 0, 0, 0)
-				self.oled.show()
+				self.display.blit(self.face_fb, 0, 0)
+				self.display.blit(self.h_hand_fb, 0, 0, 0)
+				self.display.blit(self.m_hand_fb, 0, 0, 0)
+				self.display.blit(self.s_hand_fb, 0, 0, 0)
+				self.display.show()
 
 				#print(ticks_ms() - es)
 				remaining = 320 - ( ticks_ms()-es )

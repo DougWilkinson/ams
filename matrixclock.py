@@ -69,7 +69,7 @@ class MatrixClock:
 				self.setall()
 				self.show_display = False
 			else:
-				self.display_clock()
+				self.display_clock(self.warn_color)
 				self.show_display = True
 
 	async def display_handler(self):

@@ -1,7 +1,7 @@
 # core.py
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 4
 
 # 2010: renamed alog.py to core.py, moved a lot out of main to here
 
@@ -140,6 +140,8 @@ wlan.active(True)
 # sleep to stop from rebooting constantly on esp32?
 sleep(.5)
 wlan.config(dhcp_hostname=hostname)
+
+
 # pm=2 is PM_POWERSAVE
 # wlan.config(pm=2)
 wlan.disconnect()
@@ -155,6 +157,10 @@ if count < 9:
 	info("Connected!")
 else:
 	error("Not connected!")
+
+# pm=PM_NONE will never turn radio off, better pings for esp32
+# not implemented on 8266, but still allows setting this
+wlan.config(pm=wlan.PM_NONE)
 
 #safeboot
 def sb():
