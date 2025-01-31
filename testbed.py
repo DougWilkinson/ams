@@ -3,13 +3,12 @@
 version = (2, 0, 9)
 # 208: broke into scale.py and this file
 
-from core import started, info, latch
+from core import info, latch
 from hx711 import HX711
 from scale import Scale
 
 hx = hx=HX711(hxclock_pin=32, hxdata_pin=33, k=229, max=300, offset=1407, samples=5)
-testbed = Scale("testbed_scale", hx, diff=20)
+testbed = Scale("testbed_scale", hx, diff=10)
 
 async def start(hostname):
-	started(hostname)
 	await latch.wait()

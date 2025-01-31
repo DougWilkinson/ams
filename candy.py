@@ -3,27 +3,31 @@ from versions import versions
 versions[__name__] = 3
 
 import uasyncio as asyncio
-from hx711 import HX711
-# from tm1637 import TM1637
+# from hx711 import HX711
+from tmclock import TMClock
+from core import latch
 from dispenser import Dispenser
-from button import Button
+from binary import Binary
+from switch import Switch
+from event import Event
 from tray import Tray
 import hass
 
 # hardware is initialized (set pins, etc)
-hx=HX711(hxclock_pin=12, hxdata_pin=14, k=386, offset=0, samples=5)
-# display = TM1637("candy_display", data_pin=0, clock_pin=4, brightness=5, speed=180)
-tray_sensor = Tray("candy_tray", pin=13, invert=True)
-dispenser = Dispenser("candy_dispenser",
-					  grams="45", 
-					  tray=tray_sensor.is_on, 
-					  hx_average=hx.average, 
-					  motor_pin=5)
-button = Button("candy_button", pin=15, invert=False)
+#hx=HX711(hxclock_pin=12, hxdata_pin=14, k=386, offset=0, samples=5)
+display = TMClock(data_pin=0, clock_pin=4, brightness=5)
 
+tray_sensor = Tray("candy_tray", pin=13, invert=True)
+# dispenser = Dispenser("candy_dispenser",
+# 					  grams="45", 
+# 					  tray=tray_sensor.is_on, 
+# 					  hx_average=hx.average, 
+# 					  motor_pin=5)
+
+button = Binary("candy_button", pin=15, invert=False)
+motor = Switch("candy_dispense", switch_pin=5)
+dispense = Event(trigger=button.state, target=motor.state, off_delay=0)
 
 async def start(hostname):
 	while True:
-		await button.wait()
-		dispenser.grams.set_state("40")
-		await asyncio.sleep(5)
+		await latch.wait()

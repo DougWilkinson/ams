@@ -1,0 +1,170 @@
+from ov2640_constants import *
+from ov2640_lores_constants import *
+from ov2640_hires_constants import *
+import machine
+import time
+import ubinascii
+import uos
+import gc
+from core import info, error
+
+resolutions = {
+	"OV2640_320x240_JPEG": OV2640_320x240_JPEG,
+	"OV2640_352x288_JPEG": OV2640_352x288_JPEG,
+	"OV2640_640x480_JPEG": OV2640_640x480_JPEG,
+	"OV2640_1024x768_JPEG": OV2640_1024x768_JPEG,
+    "OV2640_1280x1024_JPEG": OV2640_1280x1024_JPEG,
+	"OV2640_1600x1200_JPEG": OV2640_1600x1200_JPEG,
+    
+}
+
+class OV2640(object):
+    def __init__(self, cspin=10, sda=8, scl=9, mosi=12, miso=13, resolution="OV2640_320x240_JPEG", polarity=0, phase=0):
+
+        self.hspi = machine.SPI(1, baudrate=2000000, polarity=polarity, phase=phase, sck=machine.Pin(14), mosi=machine.Pin(mosi), miso=machine.Pin(miso))
+        self.i2c = machine.SoftI2C(scl=machine.Pin(scl), sda=machine.Pin(sda), freq=1000000)
+    
+        # first init spi assuming the hardware spi is connected
+        self.hspi.init()
+
+        # chip select -- active low
+        self.cspin = machine.Pin(cspin, machine.Pin.OUT)
+        self.cspin.on()
+
+        # init the i2c interface
+        addrs = self.i2c.scan()
+        info("i2c scan: %s" % addrs)
+   
+        # select register set table 13
+        self.i2c.writeto_mem(SENSORADDR, 0xff, b'\x01')
+        # initiate system reset bit 7 (bits 4,5,6=0 sets full UXGA resolution)
+        self.i2c.writeto_mem(SENSORADDR, 0x12, b'\x80')
+       
+        # let it come up
+        time.sleep_ms(100)
+    
+        # jpg init registers
+        cam_write_register_set(self.i2c, SENSORADDR, OV2640_JPEG_INIT)
+        cam_write_register_set(self.i2c, SENSORADDR, OV2640_YUV422)
+        cam_write_register_set(self.i2c, SENSORADDR, OV2640_JPEG)
+   
+        # select register set (table 13 in datasheet)
+        self.i2c.writeto_mem(SENSORADDR, 0xff, b'\x01')
+        # set 
+        self.i2c.writeto_mem(SENSORADDR, 0x15, b'\x00')
+        
+        self.resolution = resolution
+        self.setresolution()
+    
+        # test the SPI bus
+        cam_spi_write(b'\x00', b'\x55', self.hspi, self.cspin)
+        res = cam_spi_read(b'\x00', self.hspi, self.cspin)
+        if (res == b'\x55'):
+            info("ov2640_init: register test successful")
+        else:
+            error("ov2640_init: register test failed! %s" % ubinascii.hexlify(res) )
+    
+    def setresolution(self):
+        # select jpg resolution
+        cam_write_register_set(self.i2c, SENSORADDR, resolutions[self.resolution])
+
+    # get image using burst read and return image in byte array
+    def get_image(self, max_buffer=100000):
+        # bit 0 - clear FIFO write done flag
+        cam_spi_write(b'\x04', b'\x01', self.hspi, self.cspin)
+    
+        # bit 1 - start capture then read status
+        cam_spi_write(b'\x04', b'\x02', self.hspi, self.cspin)
+        time.sleep_ms(10)
+    
+        # read status
+        res = cam_spi_read(b'\x41', self.hspi, self.cspin)
+        cnt = 0
+        #if (res == b'\x00'):
+        #    print("initiate capture may have failed, return byte: %s" % ubinascii.hexlify(res))
+
+        # read the image from the camera fifo
+        while True:
+            res = cam_spi_read(b'\x41', self.hspi, self.cspin)
+            mask = b'\x08'
+            if (res[0] & mask[0]):
+                break
+            #print("continuing, res register %s" % ubinascii.hexlify(res))
+            time.sleep_ms(10)
+            cnt += 1
+        #print("slept in loop %d times" % cnt)
+   
+        # read the fifo size
+        b1 = cam_spi_read(b'\x44', self.hspi, self.cspin)
+        b2 = cam_spi_read(b'\x43', self.hspi, self.cspin)
+        b3 = cam_spi_read(b'\x42', self.hspi, self.cspin)
+        fifo_size = b1[0] << 16 | b2[0] << 8 | b3[0] 
+        info("ov2640_captured: %d bytes" % fifo_size)
+        gc.collect()
+    
+        fifo = cam_spi_burst_read(fifo_size, self.hspi, self.cspin)
+
+        for i in range(len(fifo) - 2, -1, -1):
+            if fifo[i:i + 2] == b'\xff\xd9':
+                break
+        # header for streaming mjpeg
+        # b'--frame\r\nContent-Type: image/jpeg\r\n\r\n'
+        return fifo[1:i+2]
+
+def cam_write_register_set(i, addr, set):
+    for el in set:
+        raddr = el[0]
+        val = bytes([el[1]])
+        if (raddr == 0xff and val == b'\xff'):
+            return
+        #print("writing byte %s to addr %x register addr %x" % \
+        #   (ubinascii.hexlify(val), addr, raddr))
+        i.writeto_mem(addr, raddr, val)
+
+def appendbuf(fn, picbuf, howmany):
+    try:
+        f = open(fn, 'ab')
+        c = 1
+        for by in picbuf:
+            if (c > howmany):
+                break
+            c += 1
+            f.write(bytes([by[0]]))
+        f.close()
+    except OSError:
+        print("error writing file")
+    print("write %d bytes from buffer" % howmany)
+
+def cam_spi_write(address, value, hspi, cspin):
+    cspin.off()
+    modebit = b'\x80'
+    d = bytes([address[0] | modebit[0], value[0]])
+    #print("bytes %s" % ubinascii.hexlify(d))
+    #print (ubd.hex())
+    hspi.write(d)
+    cspin.on()
+
+def cam_spi_burst_read(fifo_size, hspi, cspin):
+    buf = bytearray(fifo_size)
+    cspin.off()
+    address=b'\x3c'
+    maskbits = b'\x7f'
+    burst_read = bytes([address[0] & maskbits[0]])
+    hspi.write(burst_read)
+    hspi.readinto(buf)
+    cspin.on()
+    return buf
+
+def cam_spi_read(address, hspi, cspin):
+    cspin.off()
+    maskbits = b'\x7f'
+    wbuf = bytes([address[0] & maskbits[0]])
+    hspi.write(wbuf)
+    buf = hspi.read(1)
+    cspin.on()
+    return (buf)
+
+# cam driver code
+# https://github.com/kanflo/esparducam/blob/master/arducam/arducam.c
+# register info
+# https://github.com/ArduCAM/Sensor-Regsiter-Decoder/blob/master/OV2640_JPEG_INIT.csv

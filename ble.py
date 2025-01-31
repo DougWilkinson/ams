@@ -1,7 +1,7 @@
 # ble.py
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 4
 # 2010: added exception checking in ble_loop
 # 2011: callback: connection: save bytes(addr) instead of "addr"
 # 2012: added exception handling in callback
@@ -111,8 +111,8 @@ async def ble_loop():
 					await asyncio.gather(poll(bdevice) )
 		except OSError:
 			error("OSError during ble_loop")
-		except:
-			error("Unknown Error in ble_loop")
+		# except:
+		# 	error("Unknown Error in ble_loop")
 
 async def handle_result():
 	global result
@@ -158,11 +158,11 @@ async def handle_result():
 async def handle_connect():
 	global ble_connect
 	async for mac, data in ble_connect:
-		debug("handle_connect: {}".format(mac) )
+		#debug("handle_connect: {}".format(mac) )
 		try:
 			conn_handle, addr_type, addr = data
-			debug("handle_connect: mac={}, connhandle={}, addr_t={}, addr={}".format(mac, conn_handle, addr_type,
-								ubinascii.hexlify(addr).decode()) )
+			# debug("handle_connect: mac={}, connhandle={}, addr_t={}, addr={}".format(mac, conn_handle, addr_type,
+								# ubinascii.hexlify(addr).decode()) )
 			# set conn_handle
 			polled_devices[mac].conn_handle = conn_handle
 			# add to table for later lookup
@@ -208,7 +208,7 @@ def callback(event, data):
 		try:
 			mac = ubinascii.hexlify(bytes(addr)).decode()
 			ble_connect.put(mac, (conn_handle, addr_type, bytes(addr) ) )
-			debug("cb: IPCONN: mac {}".format(mac))
+			#debug("cb: IPCONN: mac {}".format(mac))
 		except:
 			error("_ipconn: error handling {}".format(addr))
 
@@ -221,54 +221,60 @@ def callback(event, data):
 		conn_handle, addr_type, addr = data
 		try:
 			mac = ubinascii.hexlify(bytes(addr)).decode()
-			debug("cb: IPDISC: mac {}, addr {}".format(mac, bytes(addr) ) )
+			#debug("cb: IPDISC: mac {}, addr {}".format(mac, bytes(addr) ) )
 			if mac in polled_devices:
 				polled_devices[mac].disconnect.set()
-			debug("cb: IPDISC: mac {}".format(mac))
+			#debug("cb: IPDISC: mac {}".format(mac))
 		except:
 			error("_ipdisc: error handling {}".format(addr))
 
 	elif event == _IGSRESULT:
 		# Called for each service found by gattc_discover_services().
 		conn_handle, start_handle, end_handle, uuid = data
-		debug("ble cb: service found: {}, {}, {}, {}".format(conn_handle, start_handle, end_handle, uuid) )
+		#debug("ble cb: service found: {}, {}, {}, {}".format(conn_handle, start_handle, end_handle, uuid) )
 
 	elif event == _IGCRESULT:
 		# Called for each characteristic found by gattc_discover_services().
 		conn_handle, def_handle, value_handle, properties, uuid = data
-		debug("ble cb: char_result:{}, {}, {}, {}, {}".format(conn_handle, def_handle, value_handle, properties, uuid) )
-		bdevice = conn_table[str(conn_handle)]
-		bdevice.value_handle = value_handle
-		bdevice.received.set()
+		#debug("ble cb: char_result:{}, {}, {}, {}, {}".format(conn_handle, def_handle, value_handle, properties, uuid) )
+		try:
+			bdevice = conn_table[str(conn_handle)]
+			bdevice.value_handle = value_handle
+			bdevice.received.set()
+		except KeyError:
+			error("cb_igcresult: no conn_table for conn_handle {}".format(conn_handle) )
 
 	elif event == _IGDRESULT:
 		# Called for each descriptor found by gattc_discover_descriptors().
 		conn_handle, dsc_handle, uuid = data
-		debug("ble cb: scanned descriptors: {}, {}, {}".format(conn_handle, dsc_handle, uuid) )
+		#debug("ble cb: scanned descriptors: {}, {}, {}".format(conn_handle, dsc_handle, uuid) )
 	elif event == _IGRRESULT:
 		# A gattc_read() has completed.
 		conn_handle, value_handle, char_data = data
-		debug("ble cb: gattc read result: {}, {}, {}".format(conn_handle, value_handle, char_data) )
+		#debug("ble cb: gattc read result: {}, {}, {}".format(conn_handle, value_handle, char_data) )
 	elif event == _IGNOTIFY:
 		# A peripheral has sent a notify request.
 		conn_handle, value_handle, notify_data = data
-		debug("ble cb: gattc notify: {}, {}, {}".format(conn_handle, value_handle, notify_data) )
+		#debug("ble cb: gattc notify: {}, {}, {}".format(conn_handle, value_handle, notify_data) )
 
-		bdevice = conn_table[str(conn_handle)]
-		bdevice.notify_data = notify_data
-		bdevice.received.set()
+		try:
+			bdevice = conn_table[str(conn_handle)]
+			bdevice.notify_data = notify_data
+			bdevice.received.set()
+		except KeyError:
+			error("cb_ignotify: no conn_table for conn_handle {}".format(conn_handle) )
 		
 	elif event == _IGIND:
 		# A peripheral has sent an indicate request.
 		conn_handle, value_handle, notify_data = data
-		debug("ble cb: gattc indicate: {}, {}, {}".format(conn_handle, value_handle, notify_data) )
-	elif event == _IGCDONE:
-		# conn_handle, value_handle, notify_data = data
-		debug("ble cb: gattc indicate: {}".format(data) )
+		#debug("ble cb: gattc indicate: {}, {}, {}".format(conn_handle, value_handle, notify_data) )
+	# elif event == _IGCDONE:
+	# 	# conn_handle, value_handle, notify_data = data
+	# 	#debug("ble cb: gattc indicate: {}".format(data) )
 	elif event == _IRQ_CONNECTION_UPDATE:
 		# The remote device has updated connection parameters.
 		conn_handle, conn_interval, conn_latency, supervision_timeout, status = data
-		debug("cb: conn_upd: c_handle={}, c_interval={}, c_latency={}, super_timeout={}, status={}".format(conn_handle, conn_interval, conn_latency, supervision_timeout, status))
+		#debug("cb: conn_upd: c_handle={}, c_interval={}, c_latency={}, super_timeout={}, status={}".format(conn_handle, conn_interval, conn_latency, supervision_timeout, status))
 	else:
 		error("ble:cb: unknown event#: {}".format(event))
 
@@ -292,29 +298,28 @@ async def poll(bdevice):
 		await asyncio.wait_for(bdevice.connected.wait(), 5)
 
 		# connected, send discover (step 2)
-		debug("poll: sending discover characteristic {} to: {}".format(ubinascii.hexlify(bdevice.uuid), bdevice.mac) )
+		#debug("poll: sending discover characteristic {} to: {}".format(ubinascii.hexlify(bdevice.uuid), bdevice.mac) )
 		bdevice.received = asyncio.ThreadSafeFlag()
 		ble.gattc_discover_characteristics(bdevice.conn_handle, 1, 65535, bdevice.uuid)
 		# wait 10 seconds for service
 		await asyncio.wait_for(bdevice.received.wait(), 5)
 				
 		# found service, send write command to query
-		debug("poll: sending write c_handle = {}, v_handle = {}, wr_val {}".format(bdevice.conn_handle, bdevice.value_handle, bdevice.write_value ) )
+		#debug("poll: sending write c_handle = {}, v_handle = {}, wr_val {}".format(bdevice.conn_handle, bdevice.value_handle, bdevice.write_value ) )
 		bdevice.received = asyncio.ThreadSafeFlag()
 		ble.gattc_write(bdevice.conn_handle, bdevice.value_handle, bytes([bdevice.write_value]))
 		# wait 10 seconds for service
 		await asyncio.wait_for(bdevice.received.wait(), 5)
 
 		# If data received, send to eventbus and remove from device instance
-		debug("poll: updating data for: {}".format(bdevice.mac) )
+		#debug("poll: updating data for: {}".format(bdevice.mac) )
 		bdevice.device.update(bdevice.notify_data)
 		
-		debug("poll: disconnecting device: {}".format(bdevice.mac) )
-		conn_table.pop(str(bdevice.conn_handle) )
+		#debug("poll: disconnecting device: {}".format(bdevice.mac) )
 		ble.gap_disconnect(bdevice.conn_handle)
 		# wait 10 seconds for disconnect
 		await asyncio.wait_for(bdevice.disconnect.wait(), 5)
-		debug("poll: disconnected: {}".format(bdevice.mac) )
+		debug("poll: closed: {}".format(bdevice.mac) )
 			
 	except asyncio.TimeoutError:
 		error("poll: timeout polling device: {}".format(bdevice.mac) )
@@ -323,7 +328,7 @@ async def poll(bdevice):
 		connect_error.set()
 	
 	except:
-		error("poll: other polling error mac: {}".format(bdevice.mac) )
+		error("poll: polling error mac: {}".format(bdevice.mac) )
 		
 	if bdevice.conn_handle:
 		conn_table.pop(str(bdevice.conn_handle) )

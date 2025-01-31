@@ -12,11 +12,11 @@ from device import Device
 from hass import ha_setup
 
 class Binary:
-	def __init__(self, name, pin, invert=False) -> None:
+	def __init__(self, name, pin, invert=False, notifier=ha_setup) -> None:
 		self.name = name
 		self.pin = Pin(pin, Pin.IN)
 		self.invert = invert
-		self.state = Device("{}".format(name), "OFF", dtype="binary_sensor", notifier_setup=ha_setup)
+		self.state = Device("{}".format(name), "OFF", dtype="binary_sensor", notifier_setup=notifier)
 		asyncio.create_task(self.handler() )
 
 	def read_pin(self):

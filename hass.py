@@ -1,7 +1,7 @@
 # hass.py
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 4
 # 2010: fixed state online not publishing
 # 2011: added flag set to track time updates
 
@@ -10,7 +10,7 @@ import uasyncio as asyncio
 from gc import collect
 from machine import RTC
 import ntptime
-from core import wlan, wifi_connected, espMAC, info, error, debug, started, stopped, hostname
+from core import wlan, wifi_connected, espMAC, info, error, debug, started
 from umqtt.simple import MQTTClient
 import json
 import mysecrets
@@ -103,7 +103,6 @@ async def sub():  # (re)connection.
 			error("sub: All topics resubscribed plus hass/utc")
 			sub_all.clear()
 		except asyncio.CancelledError:
-			stopped("sub")
 			return
 		except:
 			# Signal mqtt reconnect
@@ -121,7 +120,6 @@ async def pub():
 				client.publish(topic, msg, retain=True)
 				debug("pub: topic: {}".format(topic) )
 		except asyncio.CancelledError:
-			stopped("pub")
 			return
 		except:
 			mqtt_connected.clear()
@@ -150,7 +148,6 @@ async def pub():
 # 				wlan.connect()
 # 			await asyncio.sleep(2)
 # 		except asyncio.CancelledError:
-# 			stopped("wifi")
 # 			return
 # 		except:
 # 			error("wifi: error, hard reset")
@@ -198,7 +195,6 @@ async def ping():
 			client.ping()
 			await asyncio.sleep(30)
 		except asyncio.CancelledError:
-			stopped("ping")
 			return
 		except OSError:
 			mqtt_connected.clear()
@@ -213,7 +209,6 @@ async def check():
 			client.check_msg()
 			await asyncio.sleep(0)
 		except asyncio.CancelledError:
-			stopped("check")
 			return
 		except OSError:
 			mqtt_connected.clear()
@@ -237,10 +232,9 @@ async def mqtt():
 			sub_all.set()
 			state.set_state('online')
 			state.publish.set()
-			info("mqtt: connected")
+			info("mqtt: connected: {}".format(mysecrets.mqtt_server) )
 			await mqtt_error.wait()
 		except asyncio.CancelledError:
-			stopped("mqtt")
 			return
 		except OSError:
 			error("mqtt: connect OSError")

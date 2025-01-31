@@ -1,8 +1,8 @@
 # ina219.py
 
 from versions import versions
-versions[__name__] = 3
-# 209: requires device object to use .pin attribute
+versions[__name__] = 4
+# 4 - added average reading
 
 import uasyncio as asyncio
 from machine import Pin
@@ -28,6 +28,7 @@ class INA219:
 		self.diff = diff
 		self.amperage = Device(name, "0.0", units="A", notifier_setup=ha_setup)
 		self.threshold = trip_threshold_amps
+		self.readings = [0]*10
 		
 		# trip device is "switchmotion"
 		# trip_device.state is Davice()
@@ -63,7 +64,7 @@ class INA219:
 			safe_current.set()
 
 	async def amperage_handler(self):
-		last_reading = 0
+		last_average = 0
 		self.amperage.publish.set()
 		while True:
 			reading = round(self.read_register(0x04) * self.k,3)
@@ -76,7 +77,12 @@ class INA219:
 				debug("Resuming current tracking/monitoring")
 				self.trip_state.set_state("OFF")
 				continue
-			if abs(last_reading - reading) > self.diff:
-				self.amperage.set_state(reading)
-				last_reading = reading
-			await asyncio.sleep_ms(100)
+
+			self.readings.insert(0, reading)
+			self.readings.pop()
+			average = sum(self.readings) / 10
+
+			if abs(average - last_average) > self.diff:
+				self.amperage.set_state(average)
+				last_average = average
+			await asyncio.sleep_ms(200)

@@ -1,23 +1,18 @@
-# msgqeue.py
-import uasyncio as asyncio
+# singlequeue.py
+import asyncio
 
 # Taken from Peter Hinch's mqtt_as code
-class MsgQueue:
+class SingleQueue:
     def __init__(self, size):
         self._q = [0 for _ in range(max(size, 4))]
         self._size = size
         self._wi = 0
         self._ri = 0
-        self._last = 0
         self._evt = asyncio.Event()
         self.discards = 0
 
-    def put(self, k, v=None):
-        if v:
-            self._q[self._wi] = (k, v)
-        else:
-            self._q[self._wi] = k
-        self.last = self._wi
+    def put(self, v):
+        self._q[self._wi] = v
         self._evt.set()
         self._wi = (self._wi + 1) % self._size
         if self._wi == self._ri:  # Would indicate empty

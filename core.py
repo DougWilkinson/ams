@@ -1,12 +1,18 @@
 # core.py
 
 from versions import versions
-versions[__name__] = 4
+versions[__name__] = 6
+# reordered and introduced minimal keyword
 
-# 2010: renamed alog.py to core.py, moved a lot out of main to here
+try:
+	import webrepl
+	webrepl_loaded = True
+except:
+	webrepl_loaded = False
+
 
 from machine import RTC, Pin, reset, freq
-#from platform import platform
+from platform import platform
 from time import localtime, time, sleep
 from network import WLAN, STA_IF
 from gc import mem_free
@@ -19,18 +25,52 @@ import uhashlib
 import ubinascii
 import uos as os
 
-try:
-	import webrepl
-	webrepl_loaded = True
-except:
-	webrepl_loaded = False
+# set boot to delay startup for 30 seconds unless reboot() used
+# gives you a chance to fix issues for low memory
+# flag.set('boot',1)
 
-use_wifi = asyncio.Event()
-use_wifi.set()
+###################
+# Wifi 
+###################
+
+# Used to signal wifi status in coros
 wifi_connected = asyncio.Event()
-webrepl_connected = asyncio.Event()
-# start as connected for booting
-webrepl_connected.set()
+
+# disable AP mode
+WLAN(AP_IF).active(False)
+
+# build MAC address to use as name if hostname not set
+espMAC = str(ubinascii.hexlify(WLAN().config('mac')).decode() )
+
+def load_config(name=espMAC, key="run"):
+	try:
+		full = {}
+		with open(name) as file:
+			raw = file.readline()
+			while raw:
+				kv = loads(raw)
+				if key and key in kv:
+					return kv[key]
+				full.update(kv)
+				raw = file.readline()
+		return full
+	except:
+		error("load_file: {} failed.".format(name))
+		return {}
+
+# Look for hostname
+
+try:
+	hostname = load_config()
+except:
+	hostname = espMAC
+
+versions["hostname"] = hostname
+versions["mac"] = espMAC
+versions["freq"] = freq() / 1000000
+versions['mpy'] = platform().split('-')[1]
+
+rtc = RTC()
 
 # used for a do nothing loop wait_for
 latch = asyncio.Event()
@@ -46,58 +86,18 @@ def genhash(file):
 
 def offset_time():
 	return localtime(time() + ((flag.get("timezone") - 24) * 3600) )
-
-###################
-# Turn off AP mode
-###################
-		
-WLAN(AP_IF).active(False)
-
-espMAC = str(ubinascii.hexlify(WLAN().config('mac')).decode() )
-versions["mac"] = espMAC
-rtc = RTC()
-versions["freq"] = freq() / 1000000
-#versions['mpy'] = platform().split('-')[1]
-
-def load_config(name=espMAC, instance="run"):
-	try:
-		full = {}
-		with open(name) as file:
-			raw = file.readline()
-			while raw:
-				kv = loads(raw)
-				if instance and instance in kv:
-					return kv[instance]
-				full.update(kv)
-				raw = file.readline()
-		return full
-	except:
-		error("load_file: {} failed.".format(name))
-		return {}
-
-###################
-# Look for hostname
-###################
-
-try:
-	hostname = load_config()
-except:
-	hostname = espMAC
-
-versions["hostname"] = hostname
-
 # log = 0 no output,1+=error 3+=info 5+=debug
 def debug(msg, value=""):
-	if webrepl_connected.is_set():
-		if 6 <= flag.get('log'):
-			# print('\u001b[36m', msg, value, "\u001b[0m" )
-			info(msg, lev=6, color='\u001b[36m')
+	if 6 <= flag.get('log'):
+		# print('\u001b[36m', msg, value, "\u001b[0m" )
+		info(msg, lev=6, color='\u001b[36m')
 
 def error(msg):
 	info(msg, lev=0, color='\u001b[31m', end="\n")
 
 def info(msg, lev=2, color='\u001b[0m', end="\n"):
 	if lev <= flag.get('log'):
+		# get time with offset
 		dt = offset_time()
 		print("{}{:02d}:{:02d}:{:02d}: {}: {}: {}{}".format( color,
 			dt[3], dt[4], dt[5], mem_free(), hostname, 
@@ -105,31 +105,6 @@ def info(msg, lev=2, color='\u001b[0m', end="\n"):
 
 
 info("hostname: {} ({})".format(hostname, freq()) )
-
-#########################
-# Check for webrepl connections
-#########################
-
-async def webrepl_status():
-	started("webrepl_status handler")
-	await asyncio.sleep(30)
-	while webrepl_loaded:
-		# wait until webrepl connection is no longer established
-		webrepl_connected.set()
-		info("webrepl_status: connected")
-		is_connected = os.dupterm(None)
-		#while hasattr(webrepl.client_s, "fileno") and webrepl.client_s.fileno() > 0:
-		while is_connected:
-			os.dupterm(is_connected)
-			await asyncio.sleep(10)
-			is_connected = os.dupterm(None)
-		info("webrepl_status: not connected - disabling output")
-		webrepl_connected.clear()
-		#while not hasattr(webrepl.client_s, "fileno") or webrepl.client_s.fileno() < 0:
-		while not is_connected:
-			await asyncio.sleep(1)
-			is_connected = os.dupterm(None)
-		os.dupterm(is_connected)
 
 #########################
 # Turn on wifi (initial)
@@ -142,8 +117,6 @@ sleep(.5)
 wlan.config(dhcp_hostname=hostname)
 
 
-# pm=2 is PM_POWERSAVE
-# wlan.config(pm=2)
 wlan.disconnect()
 wlan.connect(wifi_name, wifi_pass)
 
@@ -160,7 +133,8 @@ else:
 
 # pm=PM_NONE will never turn radio off, better pings for esp32
 # not implemented on 8266, but still allows setting this
-wlan.config(pm=wlan.PM_NONE)
+# pm=2 is PM_POWERSAVE
+# wlan.config(pm=wlan.PM_NONE)
 
 #safeboot
 def sb():
@@ -177,28 +151,13 @@ def reboot(boot=10):
 	while True:
 		pass
 
-async def blink():
-	statusled = Pin(2, Pin.OUT, 0)
-	# 200 is wifi not connected
-	status = 200
-	while True:
-		statusled.value(0)
-		await asyncio.sleep_ms(status)
-		statusled.value(1)
-		await asyncio.sleep_ms(status)
-		sleep(.05)
-		if wlan.isconnected():
-			status = 3000
-		else:
-			status = 200
-
 # Keeps wifi connected
 async def wifi():
 	global wlan
 	started("wifi")
 	essid = wlan.config('essid')
 	retries = 0
-	while use_wifi.is_set():
+	while True:
 		try:
 			while wlan.isconnected():
 				wifi_connected.set()
@@ -220,7 +179,6 @@ async def wifi():
 				wlan.connect()
 			await asyncio.sleep(2)
 		except asyncio.CancelledError:
-			stopped("wifi")
 			return
 		except:
 			error("wifi: error, hard reset")
@@ -233,35 +191,14 @@ async def wifi():
 	wlan.disconnect()
 	wlan.active(False)
 
-def offset_time():
-	return localtime(time() + ((flag.get("timezone") - 24) * 3600) )
-
 def started(pid):
 	info("started: {}".format(pid))
-def running(pid):
-	info("running: {}".format(pid))
-def stopped(pid):
-	debug("stopped.")
-def exited(pid):
-	info("exited: {}".format(pid))
 
+if "ESP32S3" in os.uname().machine:
+	from blinkrgb import blink
+else:
+	from blinkled import blink
 
-# saves file in json format, separate lines to allow for reading partial config (above)
-# TODO: combine with a setup script to allow configuration via web/AP mode?
-
-def save_json(name, content) -> bool:
-	try:
-		with open(name, "w") as file:
-			for k,v in content.items():
-				file.write(dumps({k:v}) )
-				file.write("\n")
-		info('Saved config {}'.format(name))
-		return True
-	except:
-		error('save_file: {} failed'.format(name))
-		return False
-
-asyncio.create_task(blink())
+asyncio.create_task(blink(wlan))
 asyncio.create_task(wifi())
-asyncio.create_task(webrepl_status())
 

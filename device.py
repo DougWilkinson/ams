@@ -39,3 +39,9 @@ class Device:
 		if self.state != str(state):
 			self.state = str(state)
 			self.publish.set()
+	
+	def on(self):
+		self.set_state("ON")
+
+	def off(self):
+		self.set_state("OFF")
