@@ -68,19 +68,18 @@ class HX711():
 			# 	asyncio.sleep_ms(1)
 			# sleep_us(10)
 			raw = self.raw_read()
-			if raw < 0 or raw > 10000:
-				continue
-			self.values.append(raw)
-			self.values.pop(0)
-			stable = True
-			for v in self.values[:-1]:
-				if abs(v-raw) > 10:
-					stable = False
-					break
-			if stable:
-				self.last_average = round( sum(self.values)/ len(self.values), 1 )					
-				self.lower = True if self.last_average < self.min else False
-				self.higher = True if self.last_average > self.max else False
+			if raw >= 0 and raw < self.max:
+				self.values.append(raw)
+				self.values.pop(0)
+				stable = True
+				for v in self.values[:-1]:
+					if abs(v-raw) > 10:
+						stable = False
+						break
+				if stable:
+					self.last_average = round( sum(self.values)/ len(self.values), 1 )					
+					self.lower = True if self.last_average < self.min else False
+					self.higher = True if self.last_average > self.max else False
 			await asyncio.sleep_ms(300)
 
 	def raw_read(self):

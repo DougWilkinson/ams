@@ -1,11 +1,12 @@
-#blinkled.py
+#espdev.py
+# pin 2 for 8266 and esp32-wroom devkits
 
 from machine import Pin
 import asyncio
 from time import sleep
 
-async def blink(wlan, led_pin=2):
-	statusled = Pin(led_pin, Pin.OUT, 0)
+async def blink(wlan):
+	statusled = Pin(2, Pin.OUT, 0)
 	# 200 is wifi not connected
 	status = 200
 	while True:

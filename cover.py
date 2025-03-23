@@ -6,7 +6,8 @@ versions[__name__] = 3
 
 from machine import Pin
 import time
-from core import info, error, debug, load_config, save_json
+from core import info, error, debug, load_config
+from settings import save_json
 from device import Device
 import uasyncio as asyncio
 from hass import ha_setup

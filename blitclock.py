@@ -114,7 +114,7 @@ class BlitClock:
 			second = ot[5]
 
 			# 24 hour time to 12
-			if hour > 11:
+			if hour > 12:
 				hour = hour - 12
 
 			if last_cx != self.cx or last_cy != self.cy:

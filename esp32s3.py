@@ -1,14 +1,15 @@
-# blinkrgb.py
+# esp32s3.py
+# uses neopixel
 
 from machine import Pin
 import asyncio
 from time import sleep
 from neopixel import NeoPixel
 
-async def blink(wlan, led_pin):
-	off_led = NeoPixel(Pin(led_pin), 1	)
+async def blink(wlan):
+	off_led = NeoPixel(Pin(48), 1	)
 	off_led[0] = (0,0,0)
-	on_led = NeoPixel(Pin(led_pin), 1	)
+	on_led = NeoPixel(Pin(48), 1	)
 	on_led[0] = (0,0,20)
 	# 200 is wifi not connected
 	status = 200

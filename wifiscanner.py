@@ -6,11 +6,14 @@ versions[__name__] = 1
 import uasyncio as asyncio
 from hass import ha_setup
 from device import Device
-from time import sleep
+from time import sleep, time
 from core import wlan, info, error, localtime
+from binascii import hexlify
 
+def show(bssid, detail):
+	return "{} - {:2s} - {:4s} db - {}".format(hexlify(bssid), str(detail['channel']), str(detail['db']), detail['name'] )
 class WifiScanner():
-	def __init__(self) -> None:
+	def __init__(self, hostname) -> None:
 		self.min_db = []
 		self.max_db = []
 		self.ssid_near = [0]*12
@@ -24,48 +27,88 @@ class WifiScanner():
 			
 			# close 0 to -75 db
 			# far -76 to -100 db
-			self.ssid_near[i+1] = Device("ssid_near_"+channel, "0", units="ssids", notifier_setup=ha_setup)
-			self.ssid_far[i+1] = Device("ssid_far_"+channel, "0", units="ssids", notifier_setup=ha_setup)
+			self.ssid_near[i+1] = Device("{}/ssid_near_{}".format(hostname,channel), "-1", units="ssids", ro=True, publish=False, notifier_setup=ha_setup)
+			self.ssid_far[i+1] = Device("{}/ssid_far_{}".format(hostname,channel), "-1", units="ssids", ro=True, publish=False, notifier_setup=ha_setup)
 			
-		asyncio.create_task(self.scan())
+		asyncio.create_task(self.scan(hostname))
 	
-	async def scan(self):
+	async def scan(self, hostname):
 		scan_results = []
 		while True:
 			scan_results.clear()
 
 			# scan multiple times
-			for i in range(10):
+			for i in range(3):
 				scan_results += wlan.scan()
-				info("scanned: {}".format(len(scan_results) ) )
-				await asyncio.sleep(10)
+				#info("scanned: {}".format(len(scan_results) ) )
+				await asyncio.sleep(5)
 
-			self.networks.clear()
+			#self.networks.clear()
+			
 			# dedup scanned results
 			for r in scan_results:
 				name, bssid, channel, db, security, hidden = r
+				if db < -75:
+					continue
 				
-				self.networks[bssid] = { 'name': name, 
+				# calculate signal
+				signal = 100 + db
+
+				if name == b'':
+					name = b'Hidden'
+
+				index = str(channel) + "_" + hexlify(bssid).decode() + "_" + name.decode()
+
+				# just update last seen
+				if index in self.networks:
+					self.networks[index]['last_seen'] = localtime()
+					self.networks[index]['last_secs'] = time()
+					if signal != int(self.networks[index]['device'].state):
+						self.networks[index]['db'] = db
+						self.networks[index]['device'].set_state(signal)
+					continue
+				
+				# new network
+				# add to network dict
+				info("{}/{}".format(hostname, index) )
+				self.networks[index] = { 'name': name, 
+					'device': Device("{}/{}".format(hostname, index), str(signal), units="%", ro=True, notifier_setup=ha_setup),
 					'channel': channel,
 					'db': db,
+					'bssid': bssid,
 					'security': security,
 					'hidden': hidden,
 					'first_seen': localtime(),
-					'last_seen': localtime()
+					'last_seen': localtime(),
+					'last_secs': time()
 					}
 
-			self.sort_by_channel()
-			error("deduped: {}".format(len(self.networks) ) )
+
+				info("new: {}".format(show(bssid, self.networks[index] ) ) )
+
+			#self.sort_by_channel()
+			
+			error("tracking: {}".format(len(self.networks) ) )
 			
 			# count near and far based on last scan
 			channel_near_count = [0]*12
 			channel_far_count = [0]*12
 			
+			#networks_copy = self.networks.copy()
+
 			# count channels used
 			for bssid,details in self.networks.items():
+				if int(details['device'].state) != 0 and details['last_secs'] < time() - 300:
+					self.networks[bssid]['device'].set_state(0)
+					info("expired: {}".format(bssid) )
+					continue
+				
+				if int(details['device'].state) == 0:
+					continue
+				 
 				channel = details['channel']
 
-				if details['db'] < -75:
+				if details['db'] < -70:
 					channel_far_count[channel] += 1
 				else:
 					channel_near_count[channel] += 1

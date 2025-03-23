@@ -1,11 +1,12 @@
-#blinkled.py
+#esp32s2.py
+# pin 15 on s2 mini
 
 from machine import Pin
 import asyncio
 from time import sleep
 
-async def blink(wlan, led_pin=2):
-	statusled = Pin(led_pin, Pin.OUT, 0)
+async def blink(wlan):
+	statusled = Pin(15, Pin.OUT, 0)
 	# 200 is wifi not connected
 	status = 200
 	while True:

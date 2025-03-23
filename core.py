@@ -1,7 +1,7 @@
 # core.py
 
 from versions import versions
-versions[__name__] = 6
+versions[__name__] = 7
 # reordered and introduced minimal keyword
 
 try:
@@ -194,11 +194,16 @@ async def wifi():
 def started(pid):
 	info("started: {}".format(pid))
 
-if "ESP32S3" in os.uname().machine:
-	from blinkrgb import blink
-else:
-	from blinkled import blink
-
-asyncio.create_task(blink(wlan))
 asyncio.create_task(wifi())
 
+if "ESP32S2" in os.uname().machine:
+	from esp32s2 import blink
+if "ESP32S3" in os.uname().machine:
+	from esp32s3 import blink
+if "ESP8266" in os.uname().machine or "ESP32 " in os.uname().machine:
+	from espdev import blink
+
+try:
+	asyncio.create_task(blink(wlan))
+except:
+	pass

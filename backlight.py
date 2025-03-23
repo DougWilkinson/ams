@@ -16,8 +16,8 @@ cover = CoverEncoder(name="backdisc", max_steps=3, timeout_ms=5000, backoff_step
 #led = LedMotion("backlight", trigger=motion, led_pin=14, num_leds=3, on_seconds=15)
 # using led on gpio 0 instead of neopixel for testing
 motion = Binary("workspace_motion", pin=5, invert=False)
-switch = Switch("green_led", switch_pin=0)
-event = Event(motion.state, switch.state, off_delay=10) 
+led_switch = Switch("green_led", switch_pin=0, off_delay=10, trigger_device=motion.state)
+#event = Event(motion.state, led_switch.switch, off_delay=10) 
 
 async def start(hostname):
 		await latch.wait()

@@ -16,7 +16,7 @@ from binary import Binary
 # clock = Tick(hostname, tick_pin=5, pause_pin=14, samples=60)
 
 # ESP32-S2 mini pin configuration
-chime_sensor = Binary("gmclock_chimes", pin=14, invert=True)
+chime_sensor = Binary("gmclock_striking", pin=14, invert=True)
 chime = Cover("gmclock_chime", enable_pin=10, step_pin=11, 
 			  dir_pin=9, delay=1250, backoff_steps=2, max_steps=550 )
 clock = Tick(hostname, tick_pin=12, pause_pin=8, samples=60)

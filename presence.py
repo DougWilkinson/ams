@@ -4,11 +4,11 @@
 from versions import versions
 versions[__name__] = 3
 
-from machine import UART, Timer
-import ubinascii
+from machine import UART, Pin
 from time import time, sleep_ms
 from core import debug, info, error, latch
 import uasyncio as asyncio
+from neopixel import NeoPixel
 
 from hass import ha_setup
 from device import Device
@@ -47,6 +47,7 @@ class Presence:
 		self.baudrate = baudrate
 		self.tx = tx
 		self.rx = rx
+		self.led = NeoPixel(Pin(5), 1)
 		
 		self.uart_init()
 
@@ -129,7 +130,7 @@ class Presence:
 		last_status = -1
 		while True:
 			self.human.read()
-			await asyncio.sleep_ms(100)
+			await asyncio.sleep(3)
 			if not self.get_status():
 				continue
 			
@@ -139,20 +140,37 @@ class Presence:
 				self.presence.set_state("OFF")
 				self.m_distance.set_state(0)
 				self.p_distance.set_state(0)
+				self.led[0] = ( 0, 0, 20 )
+				self.led.write()
 
-			if self.status & 1:
-				# update motion
-				self.motion.set_state("ON")
-				if abs(self.m_dist - int(self.m_distance.state)) > 30:
-					self.m_distance.set_state(self.m_dist)
-					info("Motion distance: {} cm ({})".format(self.m_dist, self.m_energy) )
+			# if self.status & 1:
+			# 	# update motion
+			# 	info("motion: new: {}, last: {}".format(self.m_dist, self.m_distance.state) )
+			# 	if abs(self.m_dist - int(self.m_distance.state)) > 5:
+			# 		self.m_distance.set_state(self.m_dist)
+			# 		info("Motion distance: {} cm ({})".format(self.m_dist, self.m_energy) )
+			# 		self.led[2] = ( 0, 0, 0 )
+			# 		use_dist = min(self.m_dist, 300)
+			# 		b = 151 - int((use_dist/300)*150)
+			# 		self.led[1] = ( b, 0, 0 )
+			# 	if int(self.m_distance.state) > 0 and self.motion.state == "OFF":
+			# 		self.motion.set_state("ON")
 
-			if self.status & 2:
+			if self.status & 2 and self.p_energy > 65 and self.p_dist > 35:
 				# update stationary
-				self.presence.set_state("ON")
-				if abs(self.p_dist - int(self.p_distance.state)) > 30:
+				info("presence: new: {}, last: {}, energy: {} det_dist {}".format(self.p_dist, self.p_distance.state, self.p_energy, self.det_dist) )
+				if abs(self.p_dist - int(self.p_distance.state)) > 5:
 					self.p_distance.set_state(self.p_dist)
 					info("Stationary distance: {} cm ({})".format(self.p_dist, self.p_energy) )
+					#self.led[2] = ( 0, 0, 0 )
+					use_dist = min(self.p_dist, 300)
+					b = 151 - int((use_dist/300)*150)
+					if b < 2:
+						b = 2
+					self.led[0] = ( 0, b, 0 )
+					self.led.write()
+				if int(self.p_distance.state) > 0 and self.presence.state == "OFF":
+					self.presence.set_state("ON")
 
 			# if self.status >:
 			# 	error("s: {}, md: {}, me: {}, sd: {}, se: {}, dd: {}".format(self.status, self.m_dist, self.m_energy, self.p_dist, self.p_energy, self.det_dist) )
@@ -170,10 +188,11 @@ class Presence:
 			self.human.write(CMD_START + command + CMD_END)
 			sleep_ms(500)
 			result = self.human.read()
-			#print(result)
 			if result and CMD_START in result:
-				#info(result)
+				print("CMD_START: ", result)
 				return result
+			else:
+				print("no CMD_START: ", result)
 			self.uart_init()
 			sleep_ms(100)
 		error("sendcmd: Ack timed out!")
@@ -215,10 +234,13 @@ class Presence:
 
 	def read_params(self):
 		params = self.sendcmd(READ_PARAMS)
-		self.m_door.set_state(params[12])
-		self.p_door.set_state(params[13])
-		info("Seeed XIAO: Max door: {}, Max motion door: {}, max pres. door:{}".format(params[11], self.m_door.state, self.p_door.state) )
-	
+		if params:
+			self.m_door.set_state(params[12])
+			self.p_door.set_state(params[13])
+			info("Seeed XIAO: Max door: {}, Max motion door: {}, max pres. door:{}".format(params[11], self.m_door.state, self.p_door.state) )
+		else:
+			info("Read params failed")
+
 	def eng_mode(self):
 		self.sendcmd(ENG_MODE)
 

@@ -18,9 +18,10 @@ def run():
 # 1 = delay start to allow remote console time
 
 if flag.get('boot') != 2:
-	if flag.get('boot') == 1:
-		delay = 30
-		while delay > 0 and webrepl.client_s is None:
-			sleep(1)
-			delay -= 1
+	delay = 20
+	while delay > 0 and webrepl.client_s is None:
+		sleep(1)
+		delay -= 1
 	run()
+
+flag.clear('boot')

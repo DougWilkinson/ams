@@ -19,7 +19,7 @@ class RGBStatus:
 		self.setall()
 		self.brightness = brightness
 		self.min_brightness = min_brightness
-		self.status = Device(name + "/rgbstatus", "unknown", notifier_setup=ha_setup)
+		self.status = Device(name, "unknown", notifier_setup=ha_setup)
 		self.urgent_ms = urgent_ms
 		self.glow_ms = glow_ms
 		self.last = time.ticks_ms()

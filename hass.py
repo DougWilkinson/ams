@@ -84,7 +84,7 @@ def ha_sub(device):
 	sub_all.set()
 
 # Set last will device here
-state = Device('esp/{}'.format(espMAC), "unknown", ro=True, notifier_setup=ha_setup)
+state = Device('esp/{}'.format(espMAC), "unknown", notifier_setup=ha_setup)
 
 # Subscribes and resubs when mqtt connection is lost
 async def sub():  # (re)connection.
@@ -160,6 +160,7 @@ async def pub():
 
 # Callback for MQTTClient
 def cb(topic, msg):
+	debug('cb: topic: {}'.format(topic))
 	td = topic.decode("utf-8")
 	if td == "hass/utc":
 		j = json.loads(msg)
@@ -176,7 +177,9 @@ def cb(topic, msg):
 				info("hass/utc: timezone set: {}".format(flag.get('timezone')) )
 		return
 
-	debug('cb: topic: {}'.format(topic))
+	if 'esp/{}'.format(espMAC) in td:
+		client.set_last_will('hass/sensor/esp/{}/state'.format(espMAC), 'shutdown', retain=True)
+
 	if td in subscribed_topics:
 		# subscribed_topics holds the topic and device object
 		device = subscribed_topics[td]

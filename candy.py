@@ -9,7 +9,6 @@ from core import latch
 from dispenser import Dispenser
 from binary import Binary
 from switch import Switch
-from event import Event
 from tray import Tray
 import hass
 
@@ -25,8 +24,7 @@ tray_sensor = Tray("candy_tray", pin=13, invert=True)
 # 					  motor_pin=5)
 
 button = Binary("candy_button", pin=15, invert=False)
-motor = Switch("candy_dispense", switch_pin=5)
-dispense = Event(trigger=button.state, target=motor.state, off_delay=0)
+dispense = Switch("candy_dispense", switch_pin=5, off_delay=3, trigger_device=button.state)
 
 async def start(hostname):
 	while True:
