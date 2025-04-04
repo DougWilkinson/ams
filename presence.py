@@ -47,7 +47,7 @@ class Presence:
 		self.baudrate = baudrate
 		self.tx = tx
 		self.rx = rx
-		self.led = NeoPixel(Pin(5), 1)
+		# self.led = NeoPixel(Pin(5), 1)
 		
 		self.uart_init()
 
@@ -140,8 +140,8 @@ class Presence:
 				self.presence.set_state("OFF")
 				self.m_distance.set_state(0)
 				self.p_distance.set_state(0)
-				self.led[0] = ( 0, 0, 20 )
-				self.led.write()
+				# self.led[0] = ( 0, 0, 20 )
+				# self.led.write()
 
 			# if self.status & 1:
 			# 	# update motion
@@ -167,8 +167,8 @@ class Presence:
 					b = 151 - int((use_dist/300)*150)
 					if b < 2:
 						b = 2
-					self.led[0] = ( 0, b, 0 )
-					self.led.write()
+					# self.led[0] = ( 0, b, 0 )
+					# self.led.write()
 				if int(self.p_distance.state) > 0 and self.presence.state == "OFF":
 					self.presence.set_state("ON")
 
