@@ -15,7 +15,7 @@ from machine import RTC, Pin, reset, freq
 from platform import platform
 from time import localtime, time, sleep
 from network import WLAN, STA_IF
-from gc import mem_free
+from gc import mem_free, mem_alloc
 import flag
 import uasyncio as asyncio
 from json import loads, dumps
@@ -23,7 +23,8 @@ from mysecrets import wifi_name, wifi_pass
 from network import WLAN, AP_IF, STA_IF
 import uhashlib
 import ubinascii
-import uos as os
+import os
+from blinkled import wifi_status, on_led, off_led
 
 # set boot to delay startup for 30 seconds unless reboot() used
 # gives you a chance to fix issues for low memory
@@ -65,27 +66,26 @@ try:
 except:
 	hostname = espMAC
 
+def offset_time():
+	return localtime(time() + ((flag.get("timezone") - 24) * 3600) )
+
+def strftime():
+	ot = offset_time()
+	return "{:02d}/{:02d}/{:02d}-T{:02d}:{:02d}:{:02d}".format( ot[0], ot[1], ot[2], ot[3], ot[4], ot[5] )
+
 versions["hostname"] = hostname
 versions["mac"] = espMAC
 versions["freq"] = freq() / 1000000
 versions['mpy'] = platform().split('-')[1]
+versions['platform'] = os.uname()[4]
+versions['memory'] = mem_free() + mem_alloc()
+versions['reboots'] = flag.get('reboots')
 
 rtc = RTC()
 
 # used for a do nothing loop wait_for
 latch = asyncio.Event()
 
-def genhash(file):
-	file_hash = uhashlib.sha256()
-	with open(file, "rb") as handle:
-		buf = handle.read(100)
-		while buf:
-			file_hash.update(buf)
-			buf = handle.read(100)	
-	print(ubinascii.hexlify(file_hash.digest() ) )
-
-def offset_time():
-	return localtime(time() + ((flag.get("timezone") - 24) * 3600) )
 # log = 0 no output,1+=error 3+=info 5+=debug
 def debug(msg, value=""):
 	if 6 <= flag.get('log'):
@@ -103,8 +103,10 @@ def info(msg, lev=2, color='\u001b[0m', end="\n"):
 			dt[3], dt[4], dt[5], mem_free(), hostname, 
 			msg, "\u001b[0m" ), end=end )
 
+def started(pid):
+	info("started: {}".format(pid))
 
-info("hostname: {} ({})".format(hostname, freq()) )
+info("hostname: {}".format(hostname) )
 
 #########################
 # Turn on wifi (initial)
@@ -112,35 +114,46 @@ info("hostname: {} ({})".format(hostname, freq()) )
 
 wlan = WLAN(STA_IF)
 wlan.active(True)
+
 # sleep to stop from rebooting constantly on esp32?
 sleep(.5)
+
 wlan.config(dhcp_hostname=hostname)
 
-
 wlan.disconnect()
+
 wlan.connect(wifi_name, wifi_pass)
 
 for count in range(10):
 	if wlan.isconnected():
 		break
 	info("waiting for {} ...".format(wifi_name))
-	sleep(1)
+	for i in range(5):
+		on_led.write()
+		sleep(.1)
+		off_led.write()
+		sleep(.1)
 
 if count < 9:
 	info("Connected!")
 else:
 	error("Not connected!")
 
+for k,v in versions.items():
+	info("{}: {}".format(k,v) )
+
 # pm=PM_NONE will never turn radio off, better pings for esp32
 # not implemented on 8266, but still allows setting this
 # pm=2 is PM_POWERSAVE
-# wlan.config(pm=wlan.PM_NONE)
+
+#wlan.config(pm=wlan.PM_NONE)
 
 #safeboot
 def sb():
 	reboot(2)
 
 def reboot(boot=10):
+	flag.set('reboots', 0)
 	flag.set('boot',boot)
 	print("REBOOTING\r\n>>> ")
 	for i in range(boot):
@@ -162,6 +175,7 @@ async def wifi():
 			while wlan.isconnected():
 				wifi_connected.set()
 				versions["ipv4"] = list(wlan.ifconfig())[0]
+				versions["signal"] = wlan.status('rssi')
 				await asyncio.sleep(1)
 			await asyncio.sleep(1)
 			if wlan.isconnected():
@@ -191,19 +205,16 @@ async def wifi():
 	wlan.disconnect()
 	wlan.active(False)
 
-def started(pid):
-	info("started: {}".format(pid))
-
 asyncio.create_task(wifi())
 
-if "ESP32S2" in os.uname().machine:
-	from esp32s2 import blink
-if "ESP32S3" in os.uname().machine:
-	from esp32s3 import blink
-if "ESP8266" in os.uname().machine or "ESP32 " in os.uname().machine:
-	from espdev import blink
+# if "ESP32S2" in os.uname().machine:
+# 	from esp32s2 import blink
+# if "ESP32S3" in os.uname().machine:
+# 	from esp32s3 import blink
+# if "ESP8266" in os.uname().machine or "ESP32 " in os.uname().machine:
+# 	from espdev import blink
 
 try:
-	asyncio.create_task(blink(wlan))
+	asyncio.create_task(wifi_status(wlan))
 except:
 	pass

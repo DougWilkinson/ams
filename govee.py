@@ -24,15 +24,15 @@ class Govee5074:
 		self.battery = Device(prefix + "battery", "0", 
 							units = '%', 
 							notifier_setup=ha_setup,
-							publish=False)
+							publish=False, ro=True)
 		self.temp = Device(prefix + "temp", "0", 
 					 		units = 'F', 
 							notifier_setup=ha_setup,
-							publish=False) 
+							publish=False, ro=True) 
 		self.humidity = Device(prefix + "humidity", "0", 
 							units = "%", 
 							notifier_setup=ha_setup,
-							publish=False) 
+							publish=False, ro=True) 
 
 	def update(self, data):
 		if bytes(Govee5074.data) in data:

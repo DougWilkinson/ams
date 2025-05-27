@@ -8,6 +8,7 @@ import uasyncio as asyncio
 from hass import ha_setup
 from device import Device
 from time import time
+from core import info
 
 # hardware is initialized (set pins, etc)
 #hx=HX711(hxclock_pin=12, hxdata_pin=14, k=386)
@@ -26,7 +27,7 @@ class Scale():
 		while True:
 			current = hx.average()
 			if abs(last - current) > diff or time() - last_pub > 300:
-				print(hx.values)
+				info("{}: values: {}".format(self.scale.name, hx.values) )
 				self.scale.set_state(current)
 				last = current
 				last_pub = time()

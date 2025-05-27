@@ -1,7 +1,7 @@
 # flag.py
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 4
 
 # 202: added minutes/hours to track time updated
 
@@ -9,7 +9,7 @@ from machine import RTC
 from time import localtime, time
 
 rtc = RTC()
-names = ["checksum","magic","length","log","timezone", "boot", "timesynced"]
+names = ["checksum","magic","length","log","timezone", "boot", "timesynced","reboots"]
 values = []
 
 def set(flag=None, value=1) -> None:
@@ -37,6 +37,7 @@ for flag in rtc.memory():
 
 if len(values) > 3 and values[1] == 52 and len(names) == values[2] and sum(values[1:]) % 255 == values[0]:
 	print("flag: Using RTC values:")
+	set("reboots",get("reboots") + 1)
 else:
 	print("flag: Initializing RTC values:")
 	values = [0,52,len(names)] + [0]*(len(names)-3)

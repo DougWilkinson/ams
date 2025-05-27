@@ -25,9 +25,9 @@ class Binary:
 	async def handler(self):
 		while True:
 			if self.state.state == "OFF" and self.read_pin():
-				debug("sensor: on")
+				debug("{}: on".format(self.state.name) )
 				self.state.set_state("ON")
 			if self.state.state == "ON" and not self.read_pin():
-				debug("sensor: off")
+				debug("{}: off".format(self.state.name) )
 				self.state.set_state("OFF")
 			await asyncio.sleep_ms(300)

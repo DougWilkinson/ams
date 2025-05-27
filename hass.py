@@ -10,7 +10,8 @@ import uasyncio as asyncio
 from gc import collect
 from machine import RTC
 import ntptime
-from core import wlan, wifi_connected, espMAC, info, error, debug, started
+from core import wlan, wifi_connected, espMAC, offset_time, strftime
+from core import info, error, debug, started
 from umqtt.simple import MQTTClient
 import json
 import mysecrets
@@ -113,19 +114,22 @@ async def pub():
 	global publish_queue
 	started("pub")
 	while True:
-		try:
-			async for topic, msg in publish_queue:
+		async for pubitem in publish_queue:
+			try:
+				topic, msg = pubitem
+				debug("pub: topic: {}".format(topic) )
 				await wifi_connected.wait()
 				await mqtt_connected.wait()
 				client.publish(topic, msg, retain=True)
-				debug("pub: topic: {}".format(topic) )
-		except asyncio.CancelledError:
-			return
-		except:
-			mqtt_connected.clear()
-			mqtt_error.set()
-			error('pub: Error topic {}'.format(topic))
-			await asyncio.sleep(1)
+			except asyncio.CancelledError:
+				return
+			except ValueError:
+				error('pub: ValueError unpacking {}'.format(pubitem))
+			except:
+				mqtt_connected.clear()
+				mqtt_error.set()
+				error('pub: Error topic {}'.format(topic))
+				await asyncio.sleep(1)
 
 # # Keeps wifi connected
 # # TODO: Add error handling hard reset
@@ -160,7 +164,8 @@ async def pub():
 
 # Callback for MQTTClient
 def cb(topic, msg):
-	debug('cb: topic: {}'.format(topic))
+	#debug('cb: topic: {}'.format(topic))
+	global state
 	td = topic.decode("utf-8")
 	if td == "hass/utc":
 		j = json.loads(msg)
@@ -171,10 +176,15 @@ def cb(topic, msg):
 			# clear watchdog to skip ntp time sync
 			mqtt_time_lost.clear()
 			flag.set("timesynced")
-			debug("hass/utc: time set")
+			debug("UTC: {}".format(j['UTC']) )
+
+			if 'last_restart' not in versions:
+				versions['last_restart'] = strftime()
+				state.publish.set()
+
 		if "timezone" in j and (flag.get('timezone') - 24) != j['timezone']:
 				flag.set('timezone', j['timezone'] + 24 )
-				info("hass/utc: timezone set: {}".format(flag.get('timezone')) )
+				info("hass TIMEZONE: {}".format(flag.get('timezone')) )
 		return
 
 	if 'esp/{}'.format(espMAC) in td:

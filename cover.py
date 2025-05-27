@@ -16,12 +16,14 @@ class Cover:
 	def __init__(self, name="cover", enable_pin=12, step_pin=13, dir_pin=15, 
 				 delay=1250, backoff_steps=300, max_steps=1000):
 		
-		saved = {'state': 'CLOSE', 'position': 0}
 		
 		try:
 			saved = load_config("cover.{}".format(name))
 		except:
 			pass
+
+		if not saved:
+			saved = {'state': 'CLOSE', 'position': 0}
 
 		self.state = Device(name, saved['state'], dtype="cover", notifier_setup=ha_setup, set_lower=True)
 		self.enable_pin = Pin(enable_pin, Pin.OUT)

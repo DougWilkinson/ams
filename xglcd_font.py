@@ -1,6 +1,7 @@
 """XGLCD Font Utility."""
 from math import ceil, floor
 
+#fakeimport Lucida_Console18x29.c
 
 class XglcdFont(object):
     """Font data in X-GLCD format.

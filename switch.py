@@ -14,13 +14,18 @@ from hass import ha_setup
 delay_enabled = asyncio.Event()
 
 class Switch:
-	def __init__(self, name="relay", switch_pin=13, off_delay=0, trigger_device=None) -> None:
+	def __init__(self, name="relay", switch_pin=13, off_delay=0, trigger_device=None, condition=None) -> None:
 
 		self.switch = Device(name, "OFF", dtype="switch", notifier_setup=ha_setup)
 		self.switch_pin = Pin(switch_pin, Pin.OUT)
 		self.switch_pin.off()
 
 		self.last_triggered = -1
+
+		if condition:
+			self.condition = condition
+		else:
+			self.condition = Device("conditoin", "ON")
 
 		asyncio.create_task(self.trigger_handler(trigger_device, off_delay) )
 
@@ -47,7 +52,7 @@ class Switch:
 		async for _, event in trigger.q:
 			debug("{} - {}".format(trigger.name, event))
 		
-			if event == "ON":
+			if event == "ON" and self.condition.state == "ON":
 				if self.switch.state == "OFF":
 					self.last_triggered = time.time()
 					if off_delay:

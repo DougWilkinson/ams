@@ -1,14 +1,16 @@
 #bigclock.py
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 4
 
 from core import info, latch
 from ledclock import LEDClock
 from binary import Binary
 
-motion = Binary("dining_motion", pin=5, invert=False)
-clock = LEDClock("bigclock", pin=14, num_leds=116, 
+# motion = Binary("dining_motion", pin=5, invert=False)
+
+# s3 mini pin configuration
+clock = LEDClock("bigclock", pin=13, num_leds=116, 
 		hand_index=[10,27,48,65,86,103,8,29,46,67,84,105],
 		direction_index=[1,-1,1,-1,1,-1,-1,1,-1,1,-1,1],
 		edge_index=[18,19,56,57,94,95,0,37,38,75,76,113,104],

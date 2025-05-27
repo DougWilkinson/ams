@@ -2,10 +2,11 @@
 
 from time import sleep_us
 from machine import Pin
-from core import error, stopped, started
+from core import info, error, started, offset_time
 from device import Device
-from hass import ha_setup
+from hass import ha_setup, ha_sub
 import asyncio
+from light import Light
 
 CMD1 = const(64)
 CMD2 = const(192)
@@ -22,18 +23,25 @@ defaults = {"pd_sck": 14,
 			"k": 229
 			}
 
-class TM1637:
-	def __init__(self, name, data_pin=0, clock_pin=4, brightness="2", speed="180" ):
-		started(name)
+class TM1637(Light):
+	def __init__(self, name, data_pin=0, clock_pin=4, brightness="2", clock=True, display_string="", speed="180" ):
+		super().__init__(name, state="ON", brightness=brightness)
+
+		started(f'tm1637:{name}, data_pin={data_pin}, clock_pin={clock_pin}, state={self.state.state}, brightness={brightness}, speed={speed}')
+
 		self.dio = Pin(data_pin, Pin.OUT, value=0)
 		self.clk = Pin(clock_pin, Pin.OUT, value=0)
 		sleep_us(DELAY)
-		self.set_brightness(brightness)
-		self._write_data_cmd()
-		self._write_dsp_ctrl()
 
-		self.string = Device(name + "/string", "    ", dtype="sensor", notifier_setup=ha_setup)
-		self.brightness = Device(name + "/brightness", brightness, dtype="sensor", notifier_setup=ha_setup)
+		self.tm_brightness(brightness)
+
+		# self._write_data_cmd()
+		# self._write_dsp_ctrl()
+
+		self.string = Device(name + "/string", display_string, dtype="sensor", notifier_setup=ha_setup)
+		# self.brightness = Device(name + "/brightness", brightness, dtype="sensor", notifier_setup=ha_setup)
+		
+		self.clock = clock
 
 		# self.string = Device("string", "hello -- ")
 		# self.brightness = Device("brightness", brightness)
@@ -41,22 +49,42 @@ class TM1637:
 		self.speed = Device("speed", speed)
 		self.colon = False
 		asyncio.create_task(self._display())
+		if self.clock:
+			asyncio.create_task(self.display_clock())
 		asyncio.create_task(self._string(self.string.q) )
-		asyncio.create_task(self._brightness(self.brightness.q))
-		
+
+	def set_state(self, state):
+		info("tm1637: set_state: {}".format(state))
+		if state == "ON":
+			self.tm_brightness(self.s_bri.state)
+		else:
+			self.tm_brightness("0")
+
+	def set_brightness(self, brightness):
+		info("tm1637: set_brightness: {}".format(brightness))
+		self.tm_brightness(brightness)
+
 	async def _string(self, queue):
 		async for _ , msg in queue:
 			if len(msg) > 0 and msg[0] == ":":
 				self.string.state = msg[1:]
 				self.colon = True
 
-	async def _brightness(self, queue):
-		async for _ , msg in queue:
-			# self.brightness.state = int(msg)
-			# self.brightness.publish.set()
-			# update it
-			self.set_brightness(self.brightness.state)
-			
+	async def display_clock(self):
+		started('TM clock')
+		while True:
+			try:
+				if self.clock:
+					str_time = "{: >2}{:0>2}".format(offset_time()[3], offset_time()[4])
+					self.colon = True
+					self.show(str_time)
+					await asyncio.sleep(.5)
+					self.colon = False
+					self.show(str_time)
+				await asyncio.sleep(.5)
+			except:
+				error('tm1637: error')
+
 	async def _display(self):
 		start = 0
 		last = ""
@@ -97,7 +125,7 @@ class TM1637:
 				continue
 
 			except asyncio.CancelledError:
-				stopped(self.name)
+				error("tm1637: cancelled: {}".format(self.name) )
 				return
 			except:
 				error('tm1637: error')
@@ -140,17 +168,16 @@ class TM1637:
 		self.clk(0)
 		sleep_us(DELAY)
 
-	def set_brightness(self, val=None):
-		if val is None:
-			return self._bright
-		val = int(val)
-		if not 0 <= val <= 7:
-			return
-
-		self._bright = val
-		self._write_data_cmd()
-		self._write_dsp_ctrl()
-
+	def tm_brightness(self, val=None):
+		
+		# val is between 0 and 255 from light.py
+		try:
+			self._bright = int(7 * int(val) / 255)
+			self._write_data_cmd()
+			self._write_dsp_ctrl()
+			info("tm1637: tm_brightness set: {}".format(self._bright))
+		except:
+			error('tm1637: error setting brightness')
 	def write(self, segments, pos=0):
 		if not 0 <= pos <= 5:
 			return

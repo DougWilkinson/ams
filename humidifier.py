@@ -7,7 +7,7 @@ from core import info, latch
 from hx711 import HX711
 from scale import Scale
 
-hx = HX711(hxclock_pin=39, hxdata_pin=40, k=229, max=700, offset=1450, samples=5)
+hx = HX711(hxclock_pin=18, hxdata_pin=19, k=229, max=1000, offset=1450, samples=5)
 testbed = Scale("humidifier_water", hx, diff=10)
 
 async def start(hostname):

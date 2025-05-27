@@ -1,5 +1,7 @@
 # tray.py
 
+# DO NOT USE - Depracted - use Binary instead
+
 # added easier access to is_on and is_off status
 version = (1,0,1)
 

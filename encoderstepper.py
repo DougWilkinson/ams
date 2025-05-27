@@ -6,10 +6,8 @@ versions[__name__] = 3
 
 from machine import Pin
 import time
-from core import info, error, debug, load_config
-from device import Device
+from core import info, error, debug
 import uasyncio as asyncio
-from hass import ha_setup
 from cover import Cover
 
 class CoverEncoder(Cover):

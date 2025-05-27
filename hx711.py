@@ -18,11 +18,12 @@ class HX711():
 	
 	def __init__(self, hxclock_pin=12, hxdata_pin=14, 
 			  k=386, offset=0, samples=3, 
-			  min=-10000, max=10000, discard=1 ):
+			  min=-10000, max=10000, diff=5, discard=1 ):
 		self.k = k
 		self.offset = offset
 		self.samples = samples
 		self.discard = discard
+		self.diff = diff
 		self.min = min
 		self.max = max
 		self.dataPin = Pin(hxdata_pin, Pin.IN)
@@ -68,7 +69,7 @@ class HX711():
 			# 	asyncio.sleep_ms(1)
 			# sleep_us(10)
 			raw = self.raw_read()
-			if raw >= 0 and raw < self.max:
+			if raw >= self.min and raw < self.max:
 				self.values.append(raw)
 				self.values.pop(0)
 				stable = True
@@ -77,9 +78,12 @@ class HX711():
 						stable = False
 						break
 				if stable:
-					self.last_average = round( sum(self.values)/ len(self.values), 1 )					
-					self.lower = True if self.last_average < self.min else False
-					self.higher = True if self.last_average > self.max else False
+					current_average = round( sum(self.values)/ len(self.values), 1 )
+					if abs(current_average - self.last_average) > self.diff:
+						self.last_average = current_average
+						# self.last_average = round( sum(self.values)/ len(self.values), 1 )					
+						self.lower = True if self.last_average < self.min else False
+						self.higher = True if self.last_average > self.max else False
 			await asyncio.sleep_ms(300)
 
 	def raw_read(self):
@@ -87,7 +91,7 @@ class HX711():
 		# 	pass
 		# sleep_us(10)
 		my = 0
-		d = disable_irq()
+		# d = disable_irq()
 		for idx in range(24):
 			toggle(self.pdsckPin)
 			data = self.dataPin.value()
@@ -97,7 +101,7 @@ class HX711():
 				my = ( my << 1) | data
 		# one read = gain of 128
 		toggle(self.pdsckPin)
-		enable_irq(d)
+		# enable_irq(d)
 		if neg: my = my - (1<<23)
 		return my/self.k + self.offset
 

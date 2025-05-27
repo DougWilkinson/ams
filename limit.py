@@ -2,14 +2,11 @@
 
 from versions import versions
 versions[__name__] = 3
-# 2011: coverlimit class with superclass Cover
+# 3: revised removed save_json
 
 from machine import Pin
-import time
-from core import info, error, debug, load_config, save_json
-from device import Device
+from core import info, error, debug
 import uasyncio as asyncio
-from hass import ha_setup
 from cover import Cover
 
 class CoverLimit(Cover):

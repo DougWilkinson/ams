@@ -1,6 +1,6 @@
 # switchmotion.py
 
-import versions
+from versions import versions
 versions[__name__] = 1
 
 from machine import Pin

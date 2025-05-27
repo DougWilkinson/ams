@@ -1,4 +1,4 @@
-# air-s3.py
+# air-mini.py
 
 from ble import init_poll_for, init_scan_for, ble_loop
 from air import WP6003

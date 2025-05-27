@@ -15,6 +15,8 @@ from neopixel import NeoPixel
 from hass import ha_setup
 import uasyncio as asyncio
 
+#fakeimport matrix_font
+
 width=6
 map=[40,41,42,43,44,45,46,47,39,38,37,36,35,34,33,32,24,25,26,27,28,29,30,31,23,22,21,20,19,18,17,16,8,9,10,11,12,13,14,15,7,6,5,4,3,2,1,0]
 
