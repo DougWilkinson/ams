@@ -54,10 +54,15 @@ class Presence:
 		self.buffer = bytearray(512)
 		self.last_reading = None
 
-		self.motion = Device("{}_motion".format(name), "OFF", dtype="binary_sensor", notifier_setup=ha_setup )
-		self.m_distance = Device("{}_motion_distance".format(name), state="0", units="cm", notifier_setup=ha_setup )
-		self.presence = Device("{}_presence".format(name), "OFF", dtype="binary_sensor", notifier_setup=ha_setup )
-		self.p_distance = Device("{}_presence_distance".format(name), state="0", units="cm", notifier_setup=ha_setup )
+		self.motion = Device("{}_motion".format(name), "OFF", dtype="binary_sensor", notifier_setup=ha_setup, publish=False )
+		self.m_distance = Device("{}_motion_distance".format(name), state="0", units="cm", notifier_setup=ha_setup, publish=False )
+		
+		self.presence = Device("{}_presence".format(name), "OFF", dtype="binary_sensor", notifier_setup=ha_setup, publish=False )
+		self.p_distance = Device("{}_presence_distance".format(name), state="0", units="cm", notifier_setup=ha_setup, publish=False )
+		self.energy = Device("{}_presence_energy".format(name), state="0", units="mJ", notifier_setup=ha_setup, publish=False )
+
+		self.det_distance = Device("{}_detector_distance".format(name), state="0", units="cm", notifier_setup=ha_setup, publish=False )
+
 		self.ack = False
 		
 		# last values read for sensor
@@ -124,6 +129,12 @@ class Presence:
 		if self.p_dist < 0 or self.p_dist > 500:
 			return False
 		
+		if self.p_energy < 0 or self.p_energy > 500:
+			return False
+		
+		if self.det_dist < 0 or self.det_dist > 500:
+			return False
+		
 		return True
 
 	async def read_sensor(self):
@@ -169,6 +180,10 @@ class Presence:
 						b = 2
 					# self.led[0] = ( 0, b, 0 )
 					# self.led.write()
+				
+					self.energy.set_state(self.p_energy)
+					self.det_distance.set_state(self.det_dist)
+				
 				if int(self.p_distance.state) > 0 and self.presence.state == "OFF":
 					self.presence.set_state("ON")
 

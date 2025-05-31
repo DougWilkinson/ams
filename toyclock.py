@@ -13,7 +13,7 @@ clock = LEDClock("toyclock", pin=11, num_leds=13,
 		direction_index=[1,-1,1,-1,1,-1,-1,1,-1,1,-1,1],
 		edge_index=[6,7,8,9,10,11,0,1,2,3,4,5,12],
 		min_hand_length=1, hour_hand_length=1, tail_length=0,
-		face_rgb=(1,1,1), hand_rgb=(25,25,25))
+		face_rgb=(1,1,1), hand_rgb=(25,25,25), invert=True )
 
 async def start(hostname):
 		await latch.wait()

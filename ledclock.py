@@ -9,17 +9,18 @@ from core import offset_time, debug, started
 from machine import Pin, RTC
 from neopixel import NeoPixel
 import uasyncio as asyncio
-from rgblight import RGBlight
+from light import Light
 from flag import get
 
 time_known = asyncio.Event()
 # hand_index is a map to translate 0-12 to the starting led#
 
-class LEDClock:
+class LEDClock(Light):
 	def __init__(self, name, pin, num_leds, 
 			  hand_index, direction_index, edge_index,
 			min_hand_length, hour_hand_length, tail_length,
-			face_rgb, hand_rgb, always_on=None ):
+			face_rgb, hand_rgb, always_on=None, invert=False ):
+		super().__init__(name, invert=invert)
 		self.leds = NeoPixel(Pin(pin), num_leds)
 		# (400,850,800,350) - modified last value
 		# timing=(350,800,800,350)  - from git issue #7985 to try
@@ -33,7 +34,7 @@ class LEDClock:
 		# Set color of outer edge leds or "None"
 		self.face_rgb = face_rgb
 		self.hand_rgb = hand_rgb
-		self.mqtt_rgb = RGBlight(name)
+		# self.mqtt_rgb = RGBlight(name)
 		self.edge_index = edge_index
 		self.hand_index = hand_index
 		self.direction_index = direction_index
@@ -44,7 +45,7 @@ class LEDClock:
 
 		asyncio.create_task(self.handle_seconds())
 		asyncio.create_task(self.handle_clock())
-		asyncio.create_task(self.rgb_handler())
+		# asyncio.create_task(self.rgb_handler())
 		#asyncio.create_task(self.flash_red())
 
 	# # ISR to write leds
@@ -62,19 +63,32 @@ class LEDClock:
 		self.leds[index] = new
 		return
 
-	async def rgb_handler(self):
-		async for _ , ev in self.mqtt_rgb.state.q:
-			debug("rgb ev: {}, {}, {}".format(ev, self.mqtt_rgb.s_bri.state, self.mqtt_rgb.s_rgb.state))
-			# trigger led update
-			if ev == "ON":
-				bri = int(self.mqtt_rgb.s_bri.state)
-			else:
-				bri = 0
-				self.leds.fill((0,0,0))
-				self.leds.write()
-			#bri = int(s_bri.state)/255
-			self.hand_rgb = ( bri, bri, bri )
-			self.refresh_hands()
+	def set_state(self, ev):
+		debug("rgb ev: {}, {}, {}".format(ev, self.s_bri.state, self.s_rgb.state))
+		# trigger led update
+		if ev == "ON":
+			bri = int(self.s_bri.state)
+		else:
+			bri = 0
+			self.leds.fill((0,0,0))
+			self.leds.write()
+		#bri = int(s_bri.state)/255
+		self.hand_rgb = ( bri, bri, bri )
+		self.refresh_hands()
+
+	# async def rgb_handler(self):
+	# 	async for _ , ev in self.mqtt_rgb.state.q:
+	# 		debug("rgb ev: {}, {}, {}".format(ev, self.mqtt_rgb.s_bri.state, self.mqtt_rgb.s_rgb.state))
+	# 		# trigger led update
+	# 		if ev == "ON":
+	# 			bri = int(self.mqtt_rgb.s_bri.state)
+	# 		else:
+	# 			bri = 0
+	# 			self.leds.fill((0,0,0))
+	# 			self.leds.write()
+	# 		#bri = int(s_bri.state)/255
+	# 		self.hand_rgb = ( bri, bri, bri )
+	# 		self.refresh_hands()
 			
 	def draw_hand(self,h,length,color,tail=0):
 		for i in range(self.hand_index[h]-(self.direction_index[h]*tail),self.hand_index[h]+(self.direction_index[h]*length),self.direction_index[h]):
