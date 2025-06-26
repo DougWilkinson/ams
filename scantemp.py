@@ -6,7 +6,7 @@ from machine import Pin
 from time import sleep, ticks_us, sleep_us
 from core import info
 # from sr04 import SR04
-import uasyncio as asyncio
+import asyncio
 from mlx90614 import MLX90614
 from machine import SoftI2C
 

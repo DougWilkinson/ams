@@ -1,8 +1,9 @@
 # core.py
 
 from versions import versions
-versions[__name__] = 7
+versions[__name__] = 8
 # reordered and introduced minimal keyword
+# 8: changed load_config to device and cleaned up u prefixes
 
 try:
 	import webrepl
@@ -17,14 +18,17 @@ from time import localtime, time, sleep
 from network import WLAN, STA_IF
 from gc import mem_free, mem_alloc
 import flag
-import uasyncio as asyncio
+import asyncio
 from json import loads, dumps
 from mysecrets import wifi_name, wifi_pass
 from network import WLAN, AP_IF, STA_IF
-import uhashlib
-import ubinascii
+import binascii
 import os
 from blinkled import wifi_status, on_led, off_led
+from device import load
+
+# add to this when async processes stop in error
+exceptions = {__name__: 0}
 
 # set boot to delay startup for 30 seconds unless reboot() used
 # gives you a chance to fix issues for low memory
@@ -41,31 +45,14 @@ wifi_connected = asyncio.Event()
 WLAN(AP_IF).active(False)
 
 # build MAC address to use as name if hostname not set
-espMAC = str(ubinascii.hexlify(WLAN().config('mac')).decode() )
-
-def load_config(name=espMAC, key="run"):
-	try:
-		full = {}
-		with open(name) as file:
-			raw = file.readline()
-			while raw:
-				kv = loads(raw)
-				if key and key in kv:
-					return kv[key]
-				full.update(kv)
-				raw = file.readline()
-		return full
-	except:
-		error("load_file: {} failed.".format(name))
-		return {}
+espMAC = str(binascii.hexlify(WLAN().config('mac')).decode() )
 
 # Look for hostname
 
-try:
-	hostname = load_config()
-except:
+hostname = load(espMAC)
+if not hostname:
 	hostname = espMAC
-
+	
 def offset_time():
 	return localtime(time() + ((flag.get("timezone") - 24) * 3600) )
 

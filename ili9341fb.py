@@ -7,7 +7,7 @@ versions[__name__] = 3
 from time import sleep
 from math import cos, sin, pi, radians
 from framebuf import FrameBuffer, RGB565  # type: ignore
-import ustruct  # type: ignore
+import struct  # type: ignore
 from machine import Pin
 
 def color565(r, g, b):

@@ -10,8 +10,8 @@ from framebuf import FrameBuffer, RGB565
 import array
 import math
 import json
-import uasyncio as asyncio
-from core import debug, offset_time
+import asyncio
+from core import offset_time, exceptions, info
 from random import randint
 from device import Device
 from hass import ha_setup
@@ -45,7 +45,7 @@ class BlitClock:
 
 	async def onoff_handler(self):
 		async for _ , ev in self.onoff.q:
-			debug("onoff: {}".format(ev) )
+			info("onoff: {}".format(ev) )
 			if 'OFF' in ev:
 				self.display.display_off()
 			else:
@@ -102,56 +102,62 @@ class BlitClock:
 
 
 	async def clock_handler(self):
-		last_minute = -1
-		last_hour = -1
-		last_cx = -1
-		last_cy = -1
 		while True:
-			full = ticks_ms()
-			ot = offset_time()
-			hour = ot[3]
-			minute = ot[4]
-			second = ot[5]
+			try:
+				last_minute = -1
+				last_hour = -1
+				last_cx = -1
+				last_cy = -1
+				while True:
+					full = ticks_ms()
+					ot = offset_time()
+					hour = ot[3]
+					minute = ot[4]
+					second = ot[5]
 
-			# 24 hour time to 12
-			if hour > 12:
-				hour = hour - 12
+					# 24 hour time to 12
+					if hour > 12:
+						hour = hour - 12
 
-			if last_cx != self.cx or last_cy != self.cy:
-				self.draw_face(self.color)
-				last_cx = self.cx
-				last_cy = self.cy
+					if last_cx != self.cx or last_cy != self.cy:
+						self.draw_face(self.color)
+						last_cx = self.cx
+						last_cy = self.cy
 
-			angle_hour = 30 * hour + round((minute/60) * 30)
-			if angle_hour != last_hour:
-				self.update_hand(self.h_hand_fb, angle_hour, fraction = 0.6, width=self.hand, color=self.color)
-				last_hour = angle_hour
+					angle_hour = 30 * hour + round((minute/60) * 30)
+					if angle_hour != last_hour:
+						self.update_hand(self.h_hand_fb, angle_hour, fraction = 0.6, width=self.hand, color=self.color)
+						last_hour = angle_hour
 
-			angle_minute = 6 * minute + round((second/60) * 6)
-			if angle_minute != last_minute:
-				self.update_hand(self.m_hand_fb, angle_minute, fraction=0.9, width=self.hand, color=self.color)
-				last_minute = angle_minute
+					angle_minute = 6 * minute + round((second/60) * 6)
+					if angle_minute != last_minute:
+						self.update_hand(self.m_hand_fb, angle_minute, fraction=0.9, width=self.hand, color=self.color)
+						last_minute = angle_minute
 
-			for i in range(3):
-				es=ticks_ms()
-				angle_second = second * 6 + ( i * 2)
-				self.update_hand(self.s_hand_fb, angle_second, fraction=0.8, color=self.color)
-				self.draw_text(self.s_hand_fb, 60, 190, "{}:{:0>2}:{:0>2}".format(hour,minute,second), 63)
-				self.display.blit(self.face_fb, 0, 0)
-				self.display.blit(self.h_hand_fb, 0, 0, 0)
-				self.display.blit(self.m_hand_fb, 0, 0, 0)
-				self.display.blit(self.s_hand_fb, 0, 0, 0)
-				self.display.show()
+					for i in range(3):
+						es=ticks_ms()
+						angle_second = second * 6 + ( i * 2)
+						self.update_hand(self.s_hand_fb, angle_second, fraction=0.8, color=self.color)
+						self.draw_text(self.s_hand_fb, 60, 190, "{}:{:0>2}:{:0>2}".format(hour,minute,second), 63)
+						self.display.blit(self.face_fb, 0, 0)
+						self.display.blit(self.h_hand_fb, 0, 0, 0)
+						self.display.blit(self.m_hand_fb, 0, 0, 0)
+						self.display.blit(self.s_hand_fb, 0, 0, 0)
+						self.display.show()
 
-				#print(ticks_ms() - es)
-				remaining = 320 - ( ticks_ms()-es )
+						#print(ticks_ms() - es)
+						remaining = 320 - ( ticks_ms()-es )
 
-				await asyncio.sleep_ms(remaining if remaining > 0 else 0)
-			
-			# print(ticks_ms() - full)
-			while second == offset_time()[5]:
-				sleep_ms(1)
+						await asyncio.sleep_ms(remaining if remaining > 0 else 0)
+					
+					# print(ticks_ms() - full)
+					while second == offset_time()[5]:
+						sleep_ms(1)
 
+			except Exception as e:
+				exceptions['blitclock.clock_handler'] = e
+				info("blitclock.clock_handler: Error: {}".format(e) )
+				
 	def draw_letter(self, frame_buffer, x, y, letter, color, background=0,
 					landscape=False):
 		"""Draw a letter.

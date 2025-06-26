@@ -1,19 +1,18 @@
 
 
 from versions import versions
-versions[__name__] = 4
-# 200: async version with oled type in params
+versions[__name__] = 5
+# 5: compatible with PC version and includes async scrolling
+
+from hass import ha_setup
+clock_color = 1
+# Leave above when transfering from PC version
 
 import asyncio
-from core import debug, offset_time
+from core import debug, offset_time, exceptions
 
 from math import sin, cos
-from random import randrange
-import time
-from sh1106 import SH1106_I2C
-from machine import Pin, SoftI2C
 from device import Device
-from hass import ha_setup
 
 # starting with segment top left to bottom right
 seven_segment_def = [
@@ -50,25 +49,24 @@ segment_lines = [
   	 (0, 8,0), (0,12,0), (1, 8,0), (1,12,0)]
 ]
 
+def rotate_3dpoint(p, angle, axis):
+	"""Rotate a 3D point around given axis."""
+	ret = [0, 0, 0]
+	cosang = cos(angle)
+	sinang = sin(angle)
+	ret[0] += (cosang+(1-cosang)*axis[0]*axis[0])*p[0]
+	ret[0] += ((1-cosang)*axis[0]*axis[1]-axis[2]*sinang)*p[1]
+	ret[0] += ((1-cosang)*axis[0]*axis[2]+axis[1]*sinang)*p[2]
+	ret[1] += ((1-cosang)*axis[0]*axis[1]+axis[2]*sinang)*p[0]
+	ret[1] += (cosang+(1-cosang)*axis[1]*axis[1])*p[1]
+	ret[1] += ((1-cosang)*axis[1]*axis[2]-axis[0]*sinang)*p[2]
+	ret[2] += ((1-cosang)*axis[0]*axis[2]-axis[1]*sinang)*p[0]
+	ret[2] += ((1-cosang)*axis[1]*axis[2]+axis[0]*sinang)*p[1]
+	ret[2] += (cosang+(1-cosang)*axis[2]*axis[2])*p[2]
+	return ret
 
 # Generate a digit with offset
 class Digits:
-
-	def rotate_3dpoint(p, angle, axis):
-		"""Rotate a 3D point around given axis."""
-		ret = [0, 0, 0]
-		cosang = cos(angle)
-		sinang = sin(angle)
-		ret[0] += (cosang+(1-cosang)*axis[0]*axis[0])*p[0]
-		ret[0] += ((1-cosang)*axis[0]*axis[1]-axis[2]*sinang)*p[1]
-		ret[0] += ((1-cosang)*axis[0]*axis[2]+axis[1]*sinang)*p[2]
-		ret[1] += ((1-cosang)*axis[0]*axis[1]+axis[2]*sinang)*p[0]
-		ret[1] += (cosang+(1-cosang)*axis[1]*axis[1])*p[1]
-		ret[1] += ((1-cosang)*axis[1]*axis[2]-axis[0]*sinang)*p[2]
-		ret[2] += ((1-cosang)*axis[0]*axis[2]-axis[1]*sinang)*p[0]
-		ret[2] += ((1-cosang)*axis[1]*axis[2]+axis[0]*sinang)*p[1]
-		ret[2] += (cosang+(1-cosang)*axis[2]*axis[2])*p[2]
-		return ret
 
 	def __init__(self, digits: list, scale=0.3, xo=0, yo=0):
 		
@@ -89,6 +87,7 @@ class Digits:
 
 		self.render(digits)
 
+		self.in_spin = False
 
 	def render(self, digits: list):
 		self.shape = []
@@ -105,25 +104,26 @@ class Digits:
 						self.shape.append( ( coords[0] + offset, coords[1], coords[2] ) )
 			offset_multiplier += 1
 		self.rotated = self.shape.copy()
-		self.rotate()
+		self.rotate(force=True)
 
 	# rotate the copy of the original shape
-	def rotate(self, x=0, y=0, z=0):
+	def rotate(self, x=0, y=0, z=0, force=False):
 		if x:
 			self.x_angle += x
 		if y:
 			self.y_angle += y
 		if z:
 			self.z_angle += z
-		#print(f'x: {self.x_angle}, y: {self.y_angle}, z: {self.z_angle}')
+		#print(f'x: {self.x_angle} + {x}, y: {self.y_angle} + {y}, z: {self.z_angle} + {z}')
 		for i in range(len(self.shape)):
-			if x:
-				self.rotated[i] = Digits.rotate_3dpoint(self.shape[i], self.x_angle, (1,0,0))
-			if y:
-				self.rotated[i] = Digits.rotate_3dpoint(self.rotated[i], self.y_angle, (0,1,0))
-			if z:
-				self.rotated[i] = Digits.rotate_3dpoint(self.rotated[i], self.z_angle, (0,0,1))
-
+			if x or force:
+				self.rotated[i] = rotate_3dpoint(self.shape[i], self.x_angle, (1,0,0))
+			else:
+				self.rotated[i] = self.shape[i]
+			if y or force:
+				self.rotated[i] = rotate_3dpoint(self.rotated[i], self.y_angle, (0,1,0))
+			if z or force:
+				self.rotated[i] = rotate_3dpoint(self.rotated[i], self.z_angle, (0,0,1))
 
 class Clock3D:
 	def __init__(self, name, display, scale=0.44):
@@ -135,13 +135,15 @@ class Clock3D:
 		self.cy = self.display.height/2
 
 		# used to compare to current time
-		self.last_time = [-1, -1, -1, -1, -1, -1, -1, -1]
+		self.last_time = [0, 0, 10, 0, 0, 10, 0, 0]
 		self.buffer = []
 		for i in range(8):
-			self.buffer.append(Digits([i], scale=self.scale, xo=i-3, yo=0 ) )
+			self.buffer.append(Digits([self.last_time[i]], scale=self.scale, xo=i-3, yo=0 ) )
 		
 		self.onoff = Device(name, state="ON", dtype="switch", notifier_setup=ha_setup)
 
+		# asyncio.create_task(self.onoff_handler())
+		# asyncio.create_task(self.update_display())
 		asyncio.create_task(self.onoff_handler())
 		asyncio.create_task(self.update_display())
 
@@ -173,59 +175,89 @@ class Clock3D:
 			bx, by = (b[0] * scale) + (b[2] * 0.3 * scale) + origin_x, (b[1] * scale) + (b[2] * 0.3 * scale) + origin_y
 			self.display.line( int(ax), int(ay), int(bx), int(by), color)
 
+
+	async def flip_digit(self, digit: Digits, new_value, speed, wait_for_event, finished_event ):
+		#print("In flip_digit new value: {}".format(new_value) )
+		await wait_for_event.wait()
+
+		if digit.in_spin:
+			finished_event.set()
+			return
+		
+		digit.in_spin = True
+
+		for angle in range(5):
+			self.draw(digit, 0)
+			digit.rotate(0.32, 0, 0 )
+			#print("Out: {} :".format(i), self.buffer[i].y_angle)
+			self.draw(digit, clock_color)
+			await asyncio.sleep(speed)
+
+		# erase old digit
+		self.draw(digit, 0)
+
+		# draw new digit while rotating
+		digit.x_angle = -1
+		digit.render(new_value)
+		self.draw(digit, clock_color)
+		#print("Addnew: {} :".format(i), self.buffer[i].y_angle)
+
+		finished_event.set()
+		await asyncio.sleep(speed)
+
+		for angle in range(5):
+			self.draw(digit, 0)
+			if angle == 9: 
+				digit.x_angle = 0
+				digit.y_angle = 0
+				digit.z_angle = 0
+				digit.render(new_value)
+			else:
+				digit.rotate(0.2, 0, 0 )
+			#print("In: {} :".format(i), self.buffer[i].y_angle)
+			self.draw(digit, clock_color)
+			await asyncio.sleep( speed)
+
+		digit.in_spin = False
+
+
 	async def update_display(self):
-		while True:
+		
+		try:		
+			while True:
 
-			hour = "{:02d}".format(offset_time()[3] )
-			minute = "{:02d}".format(offset_time()[4] )
-			second = "{:02d}".format(offset_time()[5] )
+				hour = "{:02d}".format(offset_time()[3] )
+				minute = "{:02d}".format(offset_time()[4] )
+				second = "{:02d}".format(offset_time()[5] )
 
-			current_time = [int(hour[0]), int(hour[1]), 10, int(minute[0]), int(minute[1]), 10, int(second[0]), int(second[1]) ]
-			#print(f'current_time: {current_time} last_time: {self.last_time} ' )
+				current_time = [int(hour[0]), int(hour[1]), 10, int(minute[0]), int(minute[1]), 10, int(second[0]), int(second[1]) ]
+				#print(f'current_time: {current_time} last_time: {self.last_time} ' )
 
-			if current_time != self.last_time:
+				if current_time != self.last_time:
 
-				for angle in range(5):
-					for i in range(8):
-						if current_time[i] != self.last_time[i]:
-						
-							self.draw(self.buffer[i], 0)
-							self.buffer[i].rotate(0.38, 0, 0 )
-							# print("B:", self.buffer[i].x_angle)
-							self.draw(self.buffer[i], 1)
-					self.display.show()
-					#time.sleep(.05)
+					always_do = asyncio.Event()
+					always_do.set()
 
-				# erase old digit
-				for i in range(8):
-					if current_time[i] != self.last_time[i]:
-						self.draw(self.buffer[i], 0)
+					asyncio.create_task(self.flip_digit(self.buffer[7], [current_time[7]], 0.001 , always_do, always_do ) )
+					
+					wait_for_next = asyncio.Event()
 
-				# draw new digit while rotating
-				for i in range(8):
-					if current_time[i] != self.last_time[i]:
-						self.buffer[i].x_angle = 4.9
-						self.buffer[i].render([current_time[i]])
-						self.draw(self.buffer[i], 1) 
-
-				for angle in range(6):
-					for i in range(8):
-						if current_time[i] != self.last_time[i]:
-
-							self.draw(self.buffer[i], 0)
-							if angle == 5: 
-								self.buffer[i].x_angle = 0
-								self.buffer[i].rotated = self.buffer[i].shape
-							else:
-								self.buffer[i].rotate(0.36, 0, 0 )
-								# print("A:", self.buffer[i].x_angle)
-							self.draw(self.buffer[i], 1)
-					self.display.show()
-					#time.sleep(.05)
-
-				self.last_time = current_time
-			
+					if second[1] == '0':
+						for i in range(7):
+							if i == 2 or i == 5:
+								self.draw(self.buffer[i], clock_color)
+								continue
+							# if current_time[i] != self.last_time[i]:
+							finished_event = asyncio.Event()
+							asyncio.create_task(self.flip_digit(self.buffer[i], [current_time[i]], 0.006 , finished_event, wait_for_next ) )
+							wait_for_next = finished_event
+						finished_event.set()
+					self.last_time = current_time
+				
 				self.display.show()
-			
-			await asyncio.sleep(.01)
+				
+				await asyncio.sleep(.001)
+		except Exception as e:
+			exceptions['clock3da.update_display'] = e
+			print("clock3da.update_display error: {}".format(e) )
 

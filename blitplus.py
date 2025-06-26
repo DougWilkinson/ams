@@ -10,7 +10,7 @@ from framebuf import FrameBuffer, MONO_VLSB, RGB565
 import array
 import math
 import json
-import uasyncio as asyncio
+import asyncio
 from core import debug, offset_time
 from random import randint
 from device import Device

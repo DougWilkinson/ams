@@ -10,7 +10,7 @@ from machine import RTC
 import array
 import math
 import json
-import uasyncio as asyncio
+import asyncio
 from core import debug, offset_time
 from random import randint
 

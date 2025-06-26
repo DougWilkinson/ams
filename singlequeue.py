@@ -1,5 +1,5 @@
 # singlequeue.py
-import uasyncio as asyncio
+import asyncio
 
 # Taken from Peter Hinch's mqtt_as code
 class SingleQueue:

@@ -7,7 +7,7 @@ import time
 from core import info, debug, started
 from device import Device
 from hass import ha_setup
-import uasyncio as asyncio
+import asyncio
 from machine import Pin
 from neopixel import NeoPixel
 

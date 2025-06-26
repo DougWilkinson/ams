@@ -6,7 +6,7 @@ versions[__name__] = 3
 
 from core import started, error
 from device import Device
-import uasyncio as asyncio
+import asyncio
 from hass import ha_setup
 
 def init(name, dht, poll_sec=60):

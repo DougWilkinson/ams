@@ -7,7 +7,7 @@ from time import localtime, time
 from machine import RTC
 import ntptime
 from core import info, error
-import uasyncio as asyncio
+import asyncio
 
 rtc = RTC()
 

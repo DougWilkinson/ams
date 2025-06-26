@@ -4,7 +4,7 @@ from ov2640_hires_constants import *
 import machine
 import time
 import ubinascii
-import uos
+import os
 import gc
 
 class OV2640(object):

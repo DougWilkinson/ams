@@ -5,7 +5,7 @@
 # from govee import Govee5074
 from analog import Analog
 from binary import Binary
-import uasyncio as asyncio
+import asyncio
 from core import latch
 
 # init_scan_for(Govee5074)

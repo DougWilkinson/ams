@@ -9,7 +9,7 @@ versions[__name__] = 3
 from machine import Pin
 import time
 from core import info, debug, error
-import uasyncio as asyncio
+import asyncio
 from neopixel import NeoPixel
 
 # {'light/name': {'module':'ledlight', 'leds': 20, 'pin':14, 'rgb': '192,24,0' }}

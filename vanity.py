@@ -12,11 +12,11 @@ from machine import Pin
 # motion = Binary("bathroom_vanity_motion", pin=4, invert=False)
 # led = LedMotion("bathroom_vanity", trigger=motion, led_pin=5, num_leds=40, on_seconds=180)
 
-motion = Binary("bathroom_vanity_motion", pin=36, invert=False)
+motion = Binary("bathroom_vanity_motion", pin=7, invert=False)
 
-led = LedMotion("bathroom_vanity", trigger=motion, led_pin=38, num_leds=40, on_seconds=180)
+led = LedMotion("bathroom_vanity", trigger=motion, led_pin=2, num_leds=40, on_seconds=180)
 
-temp = dhtx.init("vanity", DHT22(Pin(40)), poll_sec=60)
+temp = dhtx.init("vanity", DHT22(Pin(6)), poll_sec=60)
 
 async def start(hostname):
 		await latch.wait()

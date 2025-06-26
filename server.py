@@ -20,7 +20,7 @@ from __init__ import gmid, isnew  # __init__.py
 upython = sys.implementation.name == 'micropython'
 if upython:
     import usocket as socket
-    import uasyncio as asyncio
+    import asyncio
     import utime as time
     import uselect as select
     import uerrno as errno

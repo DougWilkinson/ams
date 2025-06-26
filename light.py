@@ -4,7 +4,7 @@ from versions import versions
 versions[__name__] = 1
 
 from core import info, debug, error
-import uasyncio as asyncio
+import asyncio
 from device import Device
 from hass import ha_setup, ha_sub
 

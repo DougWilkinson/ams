@@ -6,7 +6,7 @@ versions[__name__] = 4
 # 2011: added flag set to track time updates
 
 import flag
-import uasyncio as asyncio
+import asyncio
 from gc import collect
 from machine import RTC
 import ntptime

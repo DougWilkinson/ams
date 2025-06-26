@@ -7,7 +7,7 @@ versions[__name__] = 3
 from machine import UART, Pin
 from time import time, sleep_ms
 from core import debug, info, error, latch
-import uasyncio as asyncio
+import asyncio
 from neopixel import NeoPixel
 
 from hass import ha_setup

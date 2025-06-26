@@ -6,7 +6,7 @@ versions[__name__[2:-2]] = 3
 import flag
 from core import info, error, started, reboot
 from core import espMAC, hostname, latch
-import uasyncio as asyncio
+import asyncio
 import webrepl
 from time import sleep
 

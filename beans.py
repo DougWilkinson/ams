@@ -3,7 +3,7 @@
 from versions import versions
 versions[__name__] = 3
 
-import uasyncio as asyncio
+import asyncio
 from hx711 import HX711
 from dispenser import Dispenser
 from rgbstatus import RGBStatus

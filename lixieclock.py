@@ -10,7 +10,7 @@ from neopixel import NeoPixel
 
 from core import offset_time, error, debug, started
 from machine import Pin, RTC
-import uasyncio as asyncio
+import asyncio
 from flag import get
 from machine import Timer
 from hass import ha_setup

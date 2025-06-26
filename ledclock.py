@@ -8,12 +8,14 @@ import time
 from core import offset_time, debug, started
 from machine import Pin, RTC
 from neopixel import NeoPixel
-import uasyncio as asyncio
+import asyncio
 from light import Light
 from flag import get
 
-time_known = asyncio.Event()
 # hand_index is a map to translate 0-12 to the starting led#
+
+display_time = asyncio.Event()
+display_time.set()
 
 class LEDClock(Light):
 	def __init__(self, name, pin, num_leds, 
@@ -21,20 +23,22 @@ class LEDClock(Light):
 			min_hand_length, hour_hand_length, tail_length,
 			face_rgb, hand_rgb, always_on=None, invert=False ):
 		super().__init__(name, invert=invert)
+		
 		self.leds = NeoPixel(Pin(pin), num_leds)
+		
 		# (400,850,800,350) - modified last value
 		# timing=(350,800,800,350)  - from git issue #7985 to try
 		# (250, 1000, 875, 375) FastLED
+		
 		self.leds.timing = (350,800,800,350)
+		
 		self.leds.fill((0,0,0))
 		self.leds.write()
-		# self.refresh = True
-		# self.timer = Timer(-1)
-		# self.timer.init(period=50, callback=self.refresh_leds)
+		
 		# Set color of outer edge leds or "None"
 		self.face_rgb = face_rgb
 		self.hand_rgb = hand_rgb
-		# self.mqtt_rgb = RGBlight(name)
+		
 		self.edge_index = edge_index
 		self.hand_index = hand_index
 		self.direction_index = direction_index
@@ -47,12 +51,6 @@ class LEDClock(Light):
 		asyncio.create_task(self.handle_clock())
 		# asyncio.create_task(self.rgb_handler())
 		#asyncio.create_task(self.flash_red())
-
-	# # ISR to write leds
-	# def refresh_leds(self, id):
-	# 	if self.refresh:
-	# 		self.leds.write()
-	# 		self.refresh = False
 
 	# merge led with new color, if 0 color, keep led color
 	def merge_led(self, index, color):
@@ -67,14 +65,16 @@ class LEDClock(Light):
 		debug("rgb ev: {}, {}, {}".format(ev, self.s_bri.state, self.s_rgb.state))
 		# trigger led update
 		if ev == "ON":
-			bri = int(self.s_bri.state)
+			display_time.set()
+			#bri = int(self.s_bri.state)
 		else:
-			bri = 0
-			self.leds.fill((0,0,0))
-			self.leds.write()
+			display_time.clear()
+			#bri = 0
+			#self.leds.fill((0,0,0))
+			#self.leds.write()
 		#bri = int(s_bri.state)/255
-		self.hand_rgb = ( bri, bri, bri )
-		self.refresh_hands()
+		#self.hand_rgb = ( bri, bri, bri )
+		#self.refresh_hands()
 
 	# async def rgb_handler(self):
 	# 	async for _ , ev in self.mqtt_rgb.state.q:
@@ -117,9 +117,6 @@ class LEDClock(Light):
 		# Draw second hand
 		while True:
 			color = self.hand_rgb[2]
-			if color == 0:
-				await asyncio.sleep(1)
-				continue
 			sec = int(RTC().datetime()[6]/5)
 			#if (last_displayed < 5 and last_displayed > sec) or last_displayed == sec or not get("timesynced"):
 			if (last_displayed < 5 and last_displayed > sec) or last_displayed == sec:
@@ -149,6 +146,13 @@ class LEDClock(Light):
 		self.last_hour = 0
 		self.next_hour = 1
 		while True:
+
+			if not display_time.is_set():
+				self.leds.fill((0,0,0))
+				self.leds.write()
+				await display_time.wait()
+				self.last_min = -1
+
 			ot = offset_time()
 			minute = ot[4]
 			if self.last_min == minute:

@@ -3,7 +3,7 @@
 from versions import versions
 versions[__name__] = 3
 
-import uasyncio as asyncio
+import asyncio
 from dht import DHT22
 from machine import Pin
 import dhtx

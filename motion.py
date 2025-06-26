@@ -8,7 +8,7 @@ versions[__name__] = 3
 from machine import Pin
 import time
 from core import info, debug
-import uasyncio as asyncio
+import asyncio
 from device import Device
 from hass import ha_setup
 

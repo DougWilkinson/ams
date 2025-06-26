@@ -1,17 +1,18 @@
 # ble.py
 
 from versions import versions
-versions[__name__] = 4
+versions[__name__] = 5
 # 2010: added exception checking in ble_loop
 # 2011: callback: connection: save bytes(addr) instead of "addr"
 # 2012: added exception handling in callback
+# 5: removed u prefixes
 
 import bluetooth
-import ubinascii
+import binascii
 import time
 from machine import reset
 from core import debug, info, error
-import uasyncio as asyncio
+import asyncio
 from msgqueue import MsgQueue
 
 _ISRESULT = const(5)
@@ -162,7 +163,7 @@ async def handle_connect():
 		try:
 			conn_handle, addr_type, addr = data
 			# debug("handle_connect: mac={}, connhandle={}, addr_t={}, addr={}".format(mac, conn_handle, addr_type,
-								# ubinascii.hexlify(addr).decode()) )
+								# binascii.hexlify(addr).decode()) )
 			# set conn_handle
 			polled_devices[mac].conn_handle = conn_handle
 			# add to table for later lookup
@@ -197,7 +198,7 @@ def callback(event, data):
 	if event == _ISRESULT:
 		addr_type, addr, connectable, rssi, adv_data = data
 		try:
-			mac = ubinascii.hexlify(bytes(addr)).decode()
+			mac = binascii.hexlify(bytes(addr)).decode()
 			result.put(mac, (addr_type, bytes(addr), connectable, rssi, bytes(adv_data)))
 			#debug("cb: ISRESULT: mac {}".format(mac))		
 		except:
@@ -206,7 +207,7 @@ def callback(event, data):
 	elif event == _IPCONN:
 		conn_handle, addr_type, addr = data
 		try:
-			mac = ubinascii.hexlify(bytes(addr)).decode()
+			mac = binascii.hexlify(bytes(addr)).decode()
 			ble_connect.put(mac, (conn_handle, addr_type, bytes(addr) ) )
 			#debug("cb: IPCONN: mac {}".format(mac))
 		except:
@@ -220,7 +221,7 @@ def callback(event, data):
 		# Connected peripheral has disconnected.
 		conn_handle, addr_type, addr = data
 		try:
-			mac = ubinascii.hexlify(bytes(addr)).decode()
+			mac = binascii.hexlify(bytes(addr)).decode()
 			#debug("cb: IPDISC: mac {}, addr {}".format(mac, bytes(addr) ) )
 			if mac in polled_devices:
 				polled_devices[mac].disconnect.set()
@@ -298,7 +299,7 @@ async def poll(bdevice):
 		await asyncio.wait_for(bdevice.connected.wait(), 5)
 
 		# connected, send discover (step 2)
-		#debug("poll: sending discover characteristic {} to: {}".format(ubinascii.hexlify(bdevice.uuid), bdevice.mac) )
+		#debug("poll: sending discover characteristic {} to: {}".format(binascii.hexlify(bdevice.uuid), bdevice.mac) )
 		bdevice.received = asyncio.ThreadSafeFlag()
 		ble.gattc_discover_characteristics(bdevice.conn_handle, 1, 65535, bdevice.uuid)
 		# wait 10 seconds for service

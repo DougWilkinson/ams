@@ -13,7 +13,7 @@ from device import Device
 from machine import Pin
 from neopixel import NeoPixel
 from hass import ha_setup
-import uasyncio as asyncio
+import asyncio
 
 #fakeimport matrix_font
 

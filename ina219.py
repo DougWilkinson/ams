@@ -4,7 +4,7 @@ from versions import versions
 versions[__name__] = 4
 # 4 - added average reading
 
-import uasyncio as asyncio
+import asyncio
 from machine import Pin
 from device import Device
 from hass import ha_setup

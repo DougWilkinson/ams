@@ -1,32 +1,51 @@
-# soap.py
+# soaplidar.py
+# new version with lidar sensor
 
-from core import info
+from versions import versions
+versions[__name__] = 1
+
+from core import info, latch, started
 from hass import ha_setup
 
 from sr04 import SR04
+from machine import Pin, I2C
 from pwmstatus import PWMStatus
-from machine import Pin
+
 from time import sleep
 from device import Device
 
 dispense_seconds = 2
 
 # this esp32-wroom
-trig_pin = 40
-echo_pin = 39
-motor_pin = 37
-green_pin = 17
-blue_pin = 21
+motor_pin = 7
 
-info(f'sr04: trig: {trig_pin}, echo: {echo_pin}, motor: {motor_pin}, green_led: {green_pin}, blue_led: {blue_pin}' )
+red_pin = 1
+green_pin = 2
+blue_pin = 3
 
-sensor = SR04("kitchen_soap", trig_pin, echo_pin )
+info(f'motor_pin: {motor_pin}, red_led: {red_pin}, green_led: {green_pin}, blue_led: {blue_pin}' )
+info(f'dispense_seconds: {dispense_seconds}' )
 
 motor = Pin(motor_pin, Pin.OUT)
 motor.off()
 
 wait_trigger_led = PWMStatus(green_pin, brightness=30)
 wait_clear_led = PWMStatus(blue_pin, brightness=50)
+
+#########################
+# lidar test
+########################
+
+from vl53l0x import VL53L0X
+from machine import I2C, Pin
+
+vlx_i2c = I2C(scl=Pin(8), sda=Pin(9))
+sensor = VL53L0X("soap_lidar", vlx_i2c)
+
+async def start(hostname):
+	started(hostname)
+	await latch.wait()
+
 
 dispense_counts = Device("kitchen_soap_uses", "0", units="count", save_state=True, notifier_setup=ha_setup)
 
@@ -60,33 +79,3 @@ async def start(hostname):
 		except:
 			info("Unknown error caught!")
 
-# # soap.py
-
-# from machine import Pin
-# from time import sleep, ticks_us, sleep_us
-# from core import info
-# from sr04 import SR04
-
-
-# sensor = SR04("soap", 40,39)
-# info("sr04 set: trig pin: 40, echo pin: 39")
-
-# motor = Pin(37, Pin.OUT)
-# motor.off()
-# info("motor pin: 37 - output set")
-
-# while True:
-# 	try:
-# 		info("waiting for trigger")
-# 		sensor.wait_trigger()
-# 		info("Soap dispensing")
-# 		motor.on()
-# 		sleep(2)
-# 		motor.off()
-# 		info("waiting for clear")
-# 		sensor.wait_clear()
-# 	except KeyboardInterrupt:
-# 		info("Keyboard - quit")
-# 		break
-# 	except:
-# 		info("Unknown error caught!")

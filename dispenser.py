@@ -10,7 +10,7 @@ from machine import Pin
 from core import info, started, error
 from device import Device
 from hass import ha_setup
-import uasyncio as asyncio
+import asyncio
 
 class Dispenser():
 

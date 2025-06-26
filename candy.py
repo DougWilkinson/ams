@@ -2,7 +2,7 @@
 from versions import versions
 versions[__name__] = 3
 
-import uasyncio as asyncio
+import asyncio
 # from hx711 import HX711
 from tm1637 import TM1637
 from core import latch

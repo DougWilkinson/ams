@@ -3,7 +3,7 @@
 from versions import versions
 versions[__name__] = 1
 
-import uasyncio as asyncio
+import asyncio
 from rgbstatus import RGBStatus
 from binary import Binary
 from core import info, latch

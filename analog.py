@@ -4,7 +4,7 @@
 from versions import versions
 versions[__name__] = 3
 
-import uasyncio as asyncio
+import asyncio
 from sys import platform
 from machine import Pin, ADC
 from device import Device

@@ -10,7 +10,7 @@ versions[__name__] = 3
 from core import started
 from time import sleep_ms, sleep_us
 from machine import Pin
-import uasyncio as asyncio
+import asyncio
 from natives import toggle
 from machine import enable_irq, disable_irq
 

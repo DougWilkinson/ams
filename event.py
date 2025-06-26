@@ -8,7 +8,7 @@ versions[__name__] = 1
 
 import time
 from core import info, debug
-import uasyncio as asyncio
+import asyncio
 from device import Device
 
 class Event:

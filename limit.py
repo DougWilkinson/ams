@@ -6,7 +6,7 @@ versions[__name__] = 3
 
 from machine import Pin
 from core import info, error, debug
-import uasyncio as asyncio
+import asyncio
 from cover import Cover
 
 class CoverLimit(Cover):

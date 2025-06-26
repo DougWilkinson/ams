@@ -2,7 +2,7 @@
 from versions import versions
 versions[__name__] = 1
 
-import uasyncio as asyncio
+import asyncio
 from core import started, latch, hostname
 
 from wifiscanner import WifiScanner

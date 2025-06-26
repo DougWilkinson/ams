@@ -1,9 +1,14 @@
 #blinkled.py
 
-from machine import Pin
+from machine import Pin, reset
 import asyncio
 from time import sleep
 from os import uname
+from select import poll
+from sys import stdin
+
+key_press = poll()
+key_press.register(stdin)
 
 class OffLed:
 	def __init__(self, pin):
@@ -48,3 +53,8 @@ async def wifi_status(wlan):
 		sleep(.05)
 		status = 3000 if wlan.isconnected() else 200
 
+		_, check_key = key_press.poll(0)[0]
+
+		if check_key & 1:
+			key_value = stdin.read(1)
+			print("key:", key_value)

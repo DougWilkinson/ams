@@ -1,10 +1,10 @@
-#office-desk.py
+#workbench.py
 
 from versions import versions
-versions[__name__] = 1
-# 1: fixed u prefix and upgrade to 1.25 micropython
+versions[__name__] = 4
 
 from core import latch, hostname
+#from ledclock import LEDClock
 from presence import Presence
 
 #from neopixel import NeoPixel

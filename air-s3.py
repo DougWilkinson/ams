@@ -6,7 +6,7 @@ from govee import Govee5074
 from hlkradar import HLKRadar
 from analog import Analog
 from binary import Binary
-import uasyncio as asyncio
+import asyncio
 
 init_scan_for(Govee5074)
 init_scan_for(HLKRadar)

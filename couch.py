@@ -9,7 +9,7 @@ from core import latch, hostname
 from presence import Presence
 
 #from neopixel import NeoPixel
-import uasyncio as asyncio
+import asyncio
 
 detector = Presence(hostname)
 

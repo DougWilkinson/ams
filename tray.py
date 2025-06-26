@@ -8,7 +8,7 @@ version = (1,0,1)
 from machine import Pin
 import time
 from core import info, debug, error, started
-import uasyncio as asyncio
+import asyncio
 from device import Device
 from hass import ha_setup
 

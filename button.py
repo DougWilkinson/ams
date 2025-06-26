@@ -6,7 +6,7 @@ versions[__name__] = 3
 from machine import Pin
 import time
 from core import info, debug, error, started, stopped, exited
-import uasyncio as asyncio
+import asyncio
 
 class Button:
 	def __init__(self, name, pin=15, pullup=False, invert=False ):

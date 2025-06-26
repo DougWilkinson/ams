@@ -10,7 +10,7 @@ from machine import Pin, PWM
 from time import ticks_us, sleep, time, ticks_diff
 from core import error, debug
 from hass import ha_setup
-import uasyncio as asyncio
+import asyncio
 
 class Tick:
 	def __init__(self, name, tick_pin=5, pause_pin=14, samples=60):

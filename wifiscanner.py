@@ -3,7 +3,7 @@
 from versions import versions
 versions[__name__] = 1
 
-import uasyncio as asyncio
+import asyncio
 from hass import ha_setup
 from device import Device
 from time import sleep, time

@@ -2,7 +2,7 @@
 
 #### wifi RTC over i2c
 from machine import Pin, RTC, SoftI2C
-import uasyncio as asyncio
+import asyncio
 #from i2cs import I2CS
 
 # set to start listening i2c channel by irq callback

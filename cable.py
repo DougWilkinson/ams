@@ -3,7 +3,7 @@
 from versions import versions
 versions[__name__] = 3
 
-import uasyncio as asyncio
+import asyncio
 from core import debug
 from machine import Pin
 from time import sleep_ms, ticks_diff, ticks_ms

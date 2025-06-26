@@ -9,7 +9,7 @@ import time
 from core import info, error, debug, load_config
 from settings import save_json
 from device import Device
-import uasyncio as asyncio
+import asyncio
 from hass import ha_setup
 
 class Cover:

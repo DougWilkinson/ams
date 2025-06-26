@@ -1,4 +1,4 @@
-import ustruct
+import struct
 
 class SensorBase:
 

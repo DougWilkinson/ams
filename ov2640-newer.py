@@ -6,7 +6,7 @@
 import machine
 import time
 import ubinascii
-import uos
+import os
 import gc
 from core import info, error
 
