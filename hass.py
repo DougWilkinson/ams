@@ -24,7 +24,19 @@ publish_queue = MsgQueue(50)
 haconfig_topic = mysecrets.ha_config_prefix + "/{}/{}/config"
 topic__template = mysecrets.ha_topic_prefix + "/{}/{}"
 
+try:
+	check_ssl = mysecrets.use_ssl
+	ssl_params = {'server_hostname': mysecrets.mqtt_server}
+except:
+	check_ssl = False
+	ssl_params = {}
+
+info("client:mqtt_server: {} - using SSL: {}".format(mysecrets.mqtt_server, check_ssl) )
+
 client = MQTTClient(espMAC, mysecrets.mqtt_server,
+	port=0,
+	ssl=check_ssl,
+	ssl_params=ssl_params,
 	user=mysecrets.mqtt_user,
 	password=mysecrets.mqtt_pass,
 	keepalive=60)

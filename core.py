@@ -1,9 +1,10 @@
 # core.py
 
 from versions import versions
-versions[__name__] = 8
+versions[__name__] = 9
 # reordered and introduced minimal keyword
 # 8: changed load_config to device and cleaned up u prefixes
+# 9: added support for settings profiles
 
 try:
 	import webrepl
@@ -20,7 +21,6 @@ from gc import mem_free, mem_alloc
 import flag
 import asyncio
 from json import loads, dumps
-from mysecrets import wifi_name, wifi_pass
 from network import WLAN, AP_IF, STA_IF
 import binascii
 import os
@@ -95,36 +95,36 @@ def started(pid):
 
 info("hostname: {}".format(hostname) )
 
-#########################
-# Turn on wifi (initial)
-#########################
+# #########################
+# # Turn on wifi (initial)
+# #########################
 
-wlan = WLAN(STA_IF)
-wlan.active(True)
+# wlan = WLAN(STA_IF)
+# wlan.active(True)
 
-# sleep to stop from rebooting constantly on esp32?
-sleep(.5)
+# # sleep to stop from rebooting constantly on esp32?
+# sleep(.5)
 
-wlan.config(dhcp_hostname=hostname)
+# wlan.config(dhcp_hostname=hostname)
 
-wlan.disconnect()
+# wlan.disconnect()
 
-wlan.connect(wifi_name, wifi_pass)
+# wlan.connect(wifi_name, wifi_pass)
 
-for count in range(10):
-	if wlan.isconnected():
-		break
-	info("waiting for {} ...".format(wifi_name))
-	for i in range(5):
-		on_led.write()
-		sleep(.1)
-		off_led.write()
-		sleep(.1)
+# for count in range(10):
+# 	if wlan.isconnected():
+# 		break
+# 	info("waiting for {} ...".format(wifi_name))
+# 	for i in range(5):
+# 		on_led.write()
+# 		sleep(.1)
+# 		off_led.write()
+# 		sleep(.1)
 
-if count < 9:
-	info("Connected!")
-else:
-	error("Not connected!")
+# if count < 9:
+# 	info("Connected!")
+# else:
+# 	error("Not connected!")
 
 for k,v in versions.items():
 	info("{}: {}".format(k,v) )

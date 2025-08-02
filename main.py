@@ -3,12 +3,34 @@
 from versions import versions
 versions[__name__[2:-2]] = 3
 
-import flag
-from core import info, error, started, reboot
-from core import espMAC, hostname, latch
+from settings import config, hostname, info, error, debug
+
 import asyncio
-import webrepl
 from time import sleep
+
+if config.wifi:
+	import wifi
+
+"""
+if wifi config is True, 
+Look for modules in config and load any that are set to True
+(wifi factory default is on)
+create tasks (they start later)
+
+wait up to 10 seconds for wifi (hostname should be known)
+wait up to 20 seconds if boot = 5 (reload after update)
+
+"""
+
+# import modules - each module should only do bare minimum when being imported
+# shut off gpios, clear leds or display, etc. NO WAITING
+
+for k, v in config.items():
+	if "module_" in k and v:
+		try:
+			mod = __import__(k.split("_")[1])
+		except:
+			continue
 
 async def start(hostname):
 	started("bootstrap")

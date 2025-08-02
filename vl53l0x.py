@@ -1,5 +1,9 @@
 # vl53l0x.py
 
+from versions import versions
+versions[__name__] = 1
+# added wait_max function
+
 from core import info, started
 from device import Device
 from hass import ha_setup
@@ -151,7 +155,95 @@ class VL53L0X:
 		self.min = min
 		self.max = max
 
-		#asyncio.create_task( self.update() )
+	# wait for values to be in_range or not, count consecutive values, timeout in msec to return if never in/out of range
+	async def wait_for(self, in_range=True, count=11, timeout=None):
+
+		if in_range:
+			min = self.min
+			max = self.max
+		else:
+			min = self.max
+			max = self.min
+
+		start_ticks = time.ticks_ms()
+		range_count = 0
+
+		while range_count < count:
+			dist = self.read()
+			
+			if dist > min and dist < max:
+				range_count += 1
+			else:
+				range_count = 0
+
+			if timeout and time.ticks_ms() - start_ticks > timeout:
+				info("timed out, dist = {}".format(dist))
+				return
+
+			await asyncio.sleep(.01)
+
+			if not range_count:
+				time.sleep_us(5000)
+
+		info("range count reached, dist = {}".format(dist))
+
+	# async def wait_trigger(self,debug=False):
+	# 	in_range_count = 0
+
+	# 	while in_range_count < 11:
+	# 		dist = self.read()
+			
+	# 		if dist > self.min and dist < self.max:
+	# 			in_range_count += 1
+	# 			if debug:
+	# 				info("dist = {}".format(dist))
+	# 		else:
+	# 			in_range_count = 0
+	# 			if debug:
+	# 				info("dist = {}".format(dist))
+	# 		await asyncio.sleep(.01)
+	# 		if not in_range_count:
+	# 			time.sleep_us(5000)
+
+	# 	info("dist = {}".format(dist))
+
+	# async def wait_max_time(self, max_ms=2000, debug=False):
+	# 	out_range_count = 0
+	# 	start_ticks = time.ticks_ms()
+
+	# 	while out_range_count < 3 and time.ticks_ms() - start_ticks < max_ms:
+	# 		dist = self.read()
+			
+	# 		if dist > self.min and dist < self.max:
+	# 			out_range_count = 0
+	# 			if debug:
+	# 				info("dist = {}".format(dist))
+	# 		else:
+	# 			out_range_count += 1
+	# 			if debug:
+	# 				info("dist = {}".format(dist))
+	# 		await asyncio.sleep(.01)
+
+	# 	info("dist = {}".format(dist))
+
+	# async def wait_clear(self, debug=False):
+	# 	out_range_count = 0
+
+	# 	while out_range_count < 11:
+	# 		dist = self.read()
+			
+	# 		if dist > self.min and dist < self.max:
+	# 			out_range_count = 0
+	# 			if debug:
+	# 				info("dist = {}".format(dist))
+	# 		else:
+	# 			out_range_count += 1
+	# 			if debug:
+	# 				info("dist = {}".format(dist))
+	# 		await asyncio.sleep(.01)
+
+	# 	info("dist = {}".format(dist))
+
 
 	# async def update(self):
 	# 	started("vl53l0x_update")
@@ -197,44 +289,6 @@ class VL53L0X:
 	# 		every_five += 1
 
 	# 		await asyncio.sleep_ms(200)
-
-	async def wait_trigger(self,debug=False):
-		in_range_count = 0
-
-		while in_range_count < 11:
-			dist = self.read()
-			
-			if dist > self.min and dist < self.max:
-				in_range_count += 1
-				if debug:
-					info("dist = {}".format(dist))
-			else:
-				in_range_count = 0
-				if debug:
-					info("dist = {}".format(dist))
-			await asyncio.sleep(.01)
-			if not in_range_count:
-				time.sleep_us(5000)
-
-		info("dist = {}".format(dist))
-
-	async def wait_clear(self, debug=False):
-		out_range_count = 0
-
-		while out_range_count < 11:
-			dist = self.read()
-			
-			if dist > self.min and dist < self.max:
-				out_range_count = 0
-				if debug:
-					info("dist = {}".format(dist))
-			else:
-				out_range_count += 1
-				if debug:
-					info("dist = {}".format(dist))
-			await asyncio.sleep(.01)
-
-		info("dist = {}".format(dist))
 
 	def _registers(self, register, values=None, struct_type='B'):
 		if values is None:

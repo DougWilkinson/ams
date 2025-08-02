@@ -3,10 +3,11 @@
 from json import loads, dumps
 
 from versions import versions
-versions[__name__] = 5
+versions[__name__] = 6
 
 # 4: always put value in q in set_state
 # 5: added save_state ,cleaned up u prefixes, load and save for states
+# 6: added save_now() to force save
 
 from msgqueue import MsgQueue
 import asyncio
@@ -21,10 +22,13 @@ import asyncio
 class Device:
 	def __init__(self, name, state="", units="", 
 			ro=False, dtype="sensor", notifier_setup=None, 
-			set_lower=False, publish=True, save_state=False ) -> None:
+			set_lower=False, publish=True, save_state=False,
+			mask=lambda x: x ) -> None:
 		self.name = name
 		self.dtype = dtype
-		self.state = state
+		self.mask = mask
+		self.raw_state = state
+		self.state = mask(state)
 		self.units = units
 		self.ro = ro
 		self.q = MsgQueue(1)
@@ -43,12 +47,16 @@ class Device:
 			asyncio.create_task(self.delayed_save())
 			saved = load(self)
 			if saved:
-				self.state = saved
+				self.raw_state = saved
+				self.state = mask(saved)
 	
 	def set_state(self, state, topic="state"):
+
 		self.q.put(topic, str(state) )
-		if self.state != str(state):
-			self.state = str(state)
+
+		if self.raw_state != str(state):
+			self.raw_state = str(state)
+			self.state = self.mask(str(state))
 			self.publish.set()
 			self.trigger_save.set()
 
@@ -59,9 +67,19 @@ class Device:
 		while True:
 			await self.trigger_save.wait()
 			await asyncio.sleep(30)
+
+			# check again to see if forced save_now() was done while waiting
+			if not self.trigger_save.is_set():
+				continue
+
 			save(self)
 			self.trigger_save.clear()
 
+	# if forcing a save sooner, cancel the delayed save
+	def save_now(self):
+		self.trigger_save.clear()
+		return save(self)
+	
 	def on(self):
 		self.set_state("ON")
 
@@ -96,7 +114,7 @@ def save(name, value="run"):
 	if type(name) == Device:
 		filename = name.dtype + "." + name.name
 		key = name.name
-		value = name.state
+		value = name.raw_state
 	else:
 		filename = name
 		key = name

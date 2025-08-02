@@ -1,5 +1,6 @@
 # backlight.py
 
+# old test rig, saving only for CoverEncoder numbers that might be useful for stepper control
 from versions import versions
 versions[__name__] = 3
 
@@ -8,7 +9,6 @@ from core import info, latch
 from encoderstepper import CoverEncoder
 from binary import Binary
 from switch import Switch
-from event import Event
 # hardware is initialized (set pins, etc)
 
 cover = CoverEncoder(name="backdisc", max_steps=3, timeout_ms=5000, backoff_steps=1)

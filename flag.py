@@ -13,10 +13,12 @@ names = ["checksum","magic","length","log","timezone", "boot", "timesynced","reb
 values = []
 
 def set(flag=None, value=1) -> None:
-	if flag:
+	try:
 		values[names.index(flag)] = value
 		values[0] = sum(values[1:]) & 255
 		rtc.memory(bytes(values))
+	except:
+		pass
 	return
 
 def show():
