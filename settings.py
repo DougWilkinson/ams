@@ -1,12 +1,8 @@
 # settings.py
 
 from versions import versions
-versions[__name__] = 1
-
-# sensor.wifi.default
-# sensor.mqtt.default
-# sensor.hass.default
-# sensor.device.default
+versions[__name__] = 2
+# 2: added microdot and web server/ap mode
 
 from device import Device
 import json
@@ -18,51 +14,64 @@ from time import localtime, time, sleep
 import binascii
 from network import WLAN
 from factory_defaults import factory_defaults
+import re
+from events import config_changed
 
 rtc=RTC()
 
 # build MAC address to use as name if hostname not set
 espMAC = str(binascii.hexlify(WLAN().config('mac')).decode() )
 
-# set hostname to MAC for now
-hostname = espMAC
-factory_defaults['hostname'] = hostname
+# set hostname to MAC if not overridden from flash or RTCmem
+factory_defaults['hostname'] = espMAC
 
-masked_values = ['mqtt_username', 'mqtt_password', 'wifi_secret']
+def get_profiles() -> list:
+	try:
+		return [ f.split(".")[2] for f in listdir() if f.startswith("sensor.profile.") ]
+	except:
+		return ['Error reading']
 
-def mask_values(unmasked):
-	if not unmasked:
-		return ''
-	unmasked_dict = json.loads(unmasked)
-	for k in masked_values:
-		if k in unmasked_dict:
-			unmasked_dict[k] = '***'
-	return json.dumps(unmasked_dict)
-
-exceptions = ('saved', 'nonpersistent', 'persistent')
 class Settings:
 
-	def __init__(self, name="default"):
+	masked_values = ['mqtt_username', 'mqtt_password', 'wifi_secret']
+
+	exceptions = ('saved', 'nonpersistent', 'persistent', 'modules')
+
+	def mask(unmasked) -> str:
+		print(unmasked)
+		if not unmasked or type(unmasked) != str:
+			return ''
+		unmasked_dict = json.loads(unmasked)
+		for k in Settings.masked_values:
+			if k in unmasked_dict:
+				unmasked_dict[k] = '***'
+		return json.dumps(unmasked_dict)
+
+	def __init__(self, name=espMAC):
 		
-		self.nonpersistent	= {"reboots": 0, "timesynced": 0, "boot": 0}
+		self.nonpersistent	= {"reboots": 0, "timesync_secs": -99999, "boot": 0, "last_wifi_ssid": ""}
 		self.persistent		= {}
-		self.save = None
+		self.modules = []
 
 		# merge from factory defaults
 		self.merge_persitent(factory_defaults)
 		result = "Using factory default settings:"
 
 		# create a device to load/save profile with masking for secrets
-		self.saved = Device(espMAC + "." + name, "{}", save_state=True, mask=mask_values)
+		self.saved = Device("profile." + name, "{}", save_state=True, mask=Settings.mask)
 
 		# merge from saved flash file
-		if self.saved.raw_state != "{}":
+		if self.saved.raw_state and self.saved.raw_state != "{}":
+			print("merging from flash", self.saved.raw_state)
 			self.merge_persitent( json.loads(self.saved.raw_state) )
 			result = "Settings loaded from flash:"
 
 		# merge from RTC (only if default)
-		if name == "default":
+		if name == espMAC:
 			result = self.load_from_rtc(result)
+			if self.saved.state == "{}":
+				print("no settings found in flash or RTC, saving factory defaults to default profile")
+				self.save()
 		
 		print(result)
 
@@ -74,8 +83,10 @@ class Settings:
 		for k, v in self.persistent.items():
 			print("flash: {}: {}".format(k, v) )
 			setattr(self, k, v)
+			if "modules_" in k:
+				self.modules.append((k.split("_")[1]) )
 
-		asyncio.create_task(self.update())
+		#asyncio.create_task(self.update())
 
 	# merge from dict to persistent settings
 	def merge_persitent(self, d):
@@ -96,9 +107,33 @@ class Settings:
 
 		return result
 
-	def save_to_flash(self):
-		print("Settings saved to flash")
-		self.saved.save_now()
+	def add_persistent(self, name, value):
+		self.persistent[name] = None
+		self.set_value(name, value)
+	
+	def	add_nonpersistent(self, name, value):
+		self.nonpersistent[name] = value
+		self.set_value(name, value)
+
+	def save(self):
+		self.saved.set_state(json.dumps(self.persistent))
+		if self.profile == "default":
+			self.save_to_rtc()
+
+		if self.saved.save_now():
+			info("save: profile saved as {}".format(self.profile) )
+		else:
+			error("save: failed to save profile: {}".format(self.profile) )
+
+	def save_as(self, name):
+		if name == espMAC or name == "":
+			error("save_as: invalid profile name!")
+			return
+		new_profile = Device("profile." + name, "" )
+		new_profile.profile = name
+		new_profile.save_now()
+		self.profile = name
+		self.save()
 
 	def save_to_rtc(self):
 		rtc_data = json.dumps({"persistent": self.persistent, "nonpersistent": self.nonpersistent} )
@@ -112,7 +147,10 @@ class Settings:
 				return
 		
 			self.persistent[name] = value
-		
+
+			# signal config change to other modules
+			config_changed.set()
+			
 			self.saved.set_state(json.dumps(self.persistent) )
 
 		if name in self.nonpersistent:
@@ -123,6 +161,9 @@ class Settings:
 			self.nonpersistent[name] = value
 		
 		self.save_to_rtc()
+		
+		if not hasattr(self, name):
+			setattr(self, name, value)
 
 	def get_value(self, name):
 		if name in self.persistent:
@@ -136,21 +177,16 @@ class Settings:
 
 	def __getattr__(self, name):
 
-		if name == "save":
-			self.save_to_flash()
-			return
-
-		if name in exceptions:
+		if name in Settings.exceptions:
 			return super().__getattr__(name)
 		return self.get_value(name)
 
 	def __setattr__(self, name, value):
-		if name == "save":
-			return
-		
-		if name in exceptions:
+
+		if name in Settings.exceptions:
 			super().__setattr__(name, value)
 			return
+
 		if name not in self.persistent and name not in self.nonpersistent:
 			raise ValueError("unknown: {}".format(name) )
 		else:
@@ -168,45 +204,51 @@ class Settings:
 	# factory reset - reset to defaults
 	# profile <profile_name> - change default to profile named profile_name
 	# delete <profile_name> - delete profile
-	async def update(self):
-		async for _ , ev in self.saved.q:
+
+	# async def update(self):
+	# 	async for _ , ev in self.saved.q:
 			
-			try:
-				if "=" in ev:
-					k, v = ev.split("=")
-					if k in self.persistent:
-						self.__setattr__(k, v)
-					continue
+	# 		try:
+	# 			if "=" in ev:
+	# 				k, v = ev.split("=")
+	# 				if k in self.persistent:
+	# 					self.__setattr__(k, v)
+	# 				continue
 
-				k, v = ev.split(" ")
+	# 			k, v = ev.split(" ")
 
-				if k == 'save':
-					self.set_default(v)
-					continue
+	# 			if k == 'save':
+	# 				self.set_default(v)
+	# 				continue
 
-				# if k == 'factory':
+	# 			# if k == 'factory':
 
-				# new_profile = Device(self.profile + "." + changes['name'], "", save_state=True, mask=mask_values)
+	# 			# new_profile = Device(self.profile + "." + changes['name'], "", save_state=True, mask=mask_values)
 
-				# new_profile.set_state(ev)
-				# new_profile.save_now()
+	# 			# new_profile.set_state(ev)
+	# 			# new_profile.save_now()
 
-			except:
-				error("settings: update: {}".format(ev) )
-	def saved_profiles(self) -> list:
-		return [ f for f in listdir() if f.startswith("sensor." + self.profile + ".") ]
+	# 		except:
+	# 			error("settings: update: {}".format(ev) )
 		
-	def set_default(self, name) -> bool:
+	def set_as_default(self, name) -> bool:
+
 		try:
-			new_profile = Device(self.profile + "." + name, "EMPTY", save_state=True, mask=mask_values)
+			# load profile to use
+			new_profile = Device("profile." + name, "EMPTY", save_state=True, mask=Settings.mask)
+			
+			# if profile exists, use it
 			if new_profile.state != "EMPTY":
-				self.default.set_state(new_profile.raw_state)
-				return True
+				self.saved.set_state(new_profile.raw_state)
+				self.save()
+
+				# signal config change to other modules
+				config_changed.set()
 			else:
-				print("profile not found: sensor." + self.profile + "." + name)
+				print("set_default: profile not found: sensor.pofile." + name)
 				return False
 		except:
-			print("Error: set_default: sensor." + self.profile + "." + name)
+			print("set_default: Error setting default to: sensor.profile." + name)
 			return False
 
 ########################################
@@ -215,6 +257,10 @@ config = Settings()
 
 def offset_time():
 	return localtime(time() + ((config.timezone - 24) * 3600) )
+
+def strftime():
+	ot = offset_time()
+	return "{:02d}/{:02d}/{:02d}-T{:02d}:{:02d}:{:02d}".format( ot[0], ot[1], ot[2], ot[3], ot[4], ot[5] )
 
 def debug(msg, value=""):
 	if 6 <= config.log:
@@ -234,8 +280,10 @@ def info(msg, lev=2, color='\u001b[0m', end="\n"):
 			dt[3], dt[4], dt[5], mem_free(), config.hostname, 
 			msg, "\u001b[0m" ), end=end )
 
-def start(msg):
-	info("starting: {}".format(msg) )
+# Notify and start coroutine
+def start(coro):
+	info("starting: {}".format(coro.__name__) )
+	asyncio.create_task(coro() )
 
 #safeboot
 def sb():

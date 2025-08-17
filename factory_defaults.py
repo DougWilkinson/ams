@@ -12,6 +12,7 @@ factory_defaults = {"profile": "default",
 				"mqtt_ssl": True,
 				"ntp_servers": [],
 				"ntp_interval": 60,
-				"module_wifi": True,
+				"wifi": True,
 				"module_hass": False,
+				"last_exception": ""
 				}

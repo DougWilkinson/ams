@@ -9,7 +9,8 @@ clock_color = 1
 # Leave above when transfering from PC version
 
 import asyncio
-from core import debug, offset_time, exceptions
+from settings import debug, offset_time, config
+from events import low_power
 
 from math import sin, cos
 from device import Device
@@ -184,6 +185,16 @@ class Clock3D:
 			finished_event.set()
 			return
 		
+		if low_power.is_set():
+			self.draw(digit, 0)
+			digit.x_angle = 0
+			digit.y_angle = 0
+			digit.z_angle = 0
+			digit.render(new_value)
+			self.draw(digit, clock_color)
+			finished_event.set()
+			return
+		
 		digit.in_spin = True
 
 		for angle in range(5):
@@ -258,6 +269,6 @@ class Clock3D:
 				
 				await asyncio.sleep(.001)
 		except Exception as e:
-			exceptions['clock3da.update_display'] = e
+			config.last_exception = 'clock3da.update_display: ' + e
 			print("clock3da.update_display error: {}".format(e) )
 

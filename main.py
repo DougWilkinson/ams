@@ -3,56 +3,66 @@
 from versions import versions
 versions[__name__[2:-2]] = 3
 
-from settings import config, hostname, info, error, debug
+import webrepl
+from settings import config, espMAC, reboot
+from settings import info, error, debug, start
 
 import asyncio
 from time import sleep
 
-if config.wifi:
-	import wifi
+import wifi
 
-"""
-if wifi config is True, 
-Look for modules in config and load any that are set to True
-(wifi factory default is on)
-create tasks (they start later)
-
-wait up to 10 seconds for wifi (hostname should be known)
-wait up to 20 seconds if boot = 5 (reload after update)
-
-"""
+if config.boot == 2:
+	raise Exception("SafeBoot enabled - use reboot() to reset boot mode")
 
 # import modules - each module should only do bare minimum when being imported
 # shut off gpios, clear leds or display, etc. NO WAITING
 
-for k, v in config.items():
+# import main module first to prioritize setup for gpios if exists
+if espMAC != config.hostname:
+	info("main: loading module: {}".format(config.hostname) )
+	__import__(config.hostname)
+
+for k, v in config.persistent.items():
 	if "module_" in k and v:
+		name = k.split("_")[1]
 		try:
-			mod = __import__(k.split("_")[1])
-		except:
+			info("main: loading module: {}".format(name) )
+			mod = __import__(name)
+		except Exception as e:
+			error("main: Error loading module: {}: {}".format(name, e) )
+			config.last_exception = e
 			continue
 
-async def start(hostname):
-	started("bootstrap")
-	while True:
-		await latch.wait()
-def run():
-	mod = __import__(hostname)
-	asyncio.run(mod.start(hostname))
+from webconfig import app
 
-if espMAC == hostname:
+if espMAC == config.hostname:
 	import hass
-	asyncio.run(start(hostname))
-	reboot()
 
 # 2 = safeboot, do not start named module
-# 1 = delay start to allow remote console time
+# 3 = delay start to allow remote console time
 
-if flag.get('boot') != 2:
+	
+# wait for netrepl to connect or 20 seconds
+if config.boot == 3:
 	delay = 20
 	while delay > 0 and webrepl.client_s is None:
 		sleep(1)
 		delay -= 1
-	run()
 
-flag.clear('boot')
+# if device unexpectedly reboots, make sure it starts immediately
+config.boot = 0
+
+info("main: starting apps")
+
+def run(host="0.0.0.0", port=80, debug=True):
+	try:
+		app.run(host=host, port=port, debug=debug)
+	except KeyboardInterrupt:
+		app.shutdown()
+		print("main: apps stopped")
+	except Exception as e:
+		error("main: fatal error: {}".format(e) )
+		app.shutdown()
+
+run()

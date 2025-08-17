@@ -86,7 +86,7 @@ class Device:
 	def off(self):
 		self.set_state("OFF")
 
-def load(name, key="run"):
+def load(name, key="run") -> str:
 
 	# if name is a device object, get the name/key from it
 	if type(name) == Device:
@@ -96,18 +96,16 @@ def load(name, key="run"):
 		filename = name
 
 	try:
-		full = {}
 		with open(filename) as file:
 			raw = file.readline()
 			while raw:
 				kv = loads(raw)
 				if key and key in kv:
 					return kv[key]
-				full.update(kv)
 				raw = file.readline()
-		return full
+		return ''
 	except:
-		return {}
+		return ''
 
 def save(name, value="run"):
 	
