@@ -6,7 +6,7 @@ versions[__name__] = 2
 
 from device import Device
 import json
-from os import stat, listdir
+from os import stat, listdir, remove
 import asyncio
 from machine import RTC, reset
 from gc import mem_free
@@ -16,6 +16,13 @@ from network import WLAN
 from factory_defaults import factory_defaults
 import re
 from events import config_changed
+
+field_display = { "system": ("hostname", "log", "timezone"), 
+				"wifi": ("wifi","wifi_ssid", "wifi_secret"), 
+				"mqtt": ("mqtt_ssl", "mqtt_server", "mqtt_username", "mqtt_password"), 
+				"ntp": ("ntp_servers", "ntp_interval"),
+				"hass": ("ha_topic", "ha_config")
+				}
 
 rtc=RTC()
 
@@ -50,7 +57,7 @@ class Settings:
 	def __init__(self, name=espMAC):
 		
 		self.nonpersistent	= {"reboots": 0, "timesync_secs": -99999, "boot": 0, "last_wifi_ssid": ""}
-		self.persistent		= {}
+		self.persistent		= {"profile": name}
 		self.modules = []
 
 		# merge from factory defaults
@@ -117,17 +124,19 @@ class Settings:
 
 	def save(self):
 		self.saved.set_state(json.dumps(self.persistent))
-		if self.profile == "default":
+		
+		# save to RTC only if default profile
+		if self.profile == espMAC:
 			self.save_to_rtc()
 
 		if self.saved.save_now():
-			info("save: profile saved as {}".format(self.profile) )
+			print("save: profile saved as {}".format(self.profile) )
 		else:
-			error("save: failed to save profile: {}".format(self.profile) )
+			print("save: failed to save profile: {}".format(self.profile) )
 
 	def save_as(self, name):
 		if name == espMAC or name == "":
-			error("save_as: invalid profile name!")
+			print("save_as: invalid profile name!")
 			return
 		new_profile = Device("profile." + name, "" )
 		new_profile.profile = name
@@ -138,6 +147,22 @@ class Settings:
 	def save_to_rtc(self):
 		rtc_data = json.dumps({"persistent": self.persistent, "nonpersistent": self.nonpersistent} )
 		rtc.memory(rtc_data)
+
+	def delete(self) -> bool:
+		if self.profile == espMAC:
+			self.persistent = factory_defaults
+			self.save()
+			config_changed.set()
+			print("delete: settings returned to factory defaults")
+			return True
+
+		try:
+			remove("sensor.profile.{}".format(self.profile) )
+			print("delete: profile deleted: {}".format(self.profile) )
+			return True
+		except:
+			print("delete: failed to delete profile: {}".format(self.profile) )
+			return False
 
 	def set_value(self, name, value):
 		
@@ -232,14 +257,20 @@ class Settings:
 	# 			error("settings: update: {}".format(ev) )
 		
 	def set_as_default(self, name) -> bool:
-
+		if self.profile != espMAC:
+			print("set_default: this is not the default profile!")
+			return True
+		
 		try:
 			# load profile to use
 			new_profile = Device("profile." + name, "EMPTY", save_state=True, mask=Settings.mask)
 			
 			# if profile exists, use it
 			if new_profile.state != "EMPTY":
+
 				self.saved.set_state(new_profile.raw_state)
+				self.saved_from_profile = name
+				self.profile = espMAC
 				self.save()
 
 				# signal config change to other modules

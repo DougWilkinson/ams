@@ -21,26 +21,17 @@ import json
 
 from msgqueue import MsgQueue
 from device import Device
+from events import config_changed
 
 publish_queue = MsgQueue(50)
 
 haconfig_topic = config.ha_config + "/{}/{}/config"
 topic__template = config.ha_topic + "/{}/{}"
 
-try:
-	check_ssl = config.mqtt_ssl
-	ssl_params = {'server_hostname': config.mqtt_server}
-except:
-	check_ssl = False
-	ssl_params = {}
-
-info("hass: mqtt_server: {}".format(config.mqtt_server) )
-info("hass: mqtt_ssl: {}".format(check_ssl) )
-
 client = MQTTClient(espMAC, config.mqtt_server,
 	port=0,
-	ssl=check_ssl,
-	ssl_params=ssl_params,
+	ssl=False,
+	ssl_params={},
 	user=config.mqtt_username,
 	password=config.mqtt_password,
 	keepalive=60)
@@ -221,8 +212,36 @@ async def mqtt():
 	global state
 	info("hass: mqtt_connection_handler running")
 	client.set_callback(cb)
+
 	while True:
 		try:
+
+			if not config.mqtt_server or not config.mqtt_username:
+				error("hass: mqtt: waiting for mqtt_server / mqtt_username to be configured")
+				await config_changed.wait()
+				continue
+
+			try:
+				if config.mqtt_ssl:
+					client.port = 8883
+					ssl_params = {'server_hostname': config.mqtt_server}
+				else:
+					client.port = 1883
+					ssl_params = {}
+
+				client.ssl = config.mqtt_ssl
+				client.server = config.mqtt_server
+				client.user = config.mqtt_username
+				client.pswd = config.mqtt_password
+
+			except:
+				error("hass: mqtt: bad mqtt config options - waiting for config change")
+				await config_changed.wait()
+				continue
+
+			info("hass: mqtt_server: {}".format(config.mqtt_server) )
+			info("hass: mqtt_ssl: {}".format(config.mqtt_ssl) )
+
 			await wifi_connected.wait()
 			#state.attr = { "hostname": hostname, "versions": versions, "mac": espMAC, "ipv4": list(wlan.ifconfig())[0]}
 			state.attr = versions

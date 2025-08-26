@@ -1,4 +1,4 @@
-factory_defaults = {"profile": "default", 
+factory_defaults = {"saved_from_profile": "", 
 				"log": 7, 
 				"timezone": 19, 
 				"hostname": "",

@@ -9,11 +9,14 @@ import gc
 import time
 import sys
 import microdot
-from settings import config, get_profiles, Settings, strftime, espMAC
+from settings import config, get_profiles, Settings, strftime, espMAC, field_display
 from settings import info as _info
 from settings import error as _error
 from events import config_changed
 import machine
+
+import hashlib
+import binascii
 
 microdot.Response.default_content_type = "text/html"
 
@@ -26,6 +29,48 @@ class CaptivePortalServer(microdot.Microdot):
 		self.sessions = set()
 		self.info("Server initialized with password length: {}".format(len(self.password)))
 		self._setup_routes()
+
+	def _sanitize_filename(self, name):
+		"""Return a safe, flat filename; disallow path traversal and absolute paths."""
+		# Strip directory components and reject suspicious names
+		name = str(name or "").strip()
+		# remove any leading slashes
+		while name.startswith("/"):
+			name = name[1:]
+		# collapse traversal
+		if ".." in name or "/" in name or "\\" in name or name == "":
+			raise ValueError("Invalid filename")
+		return name
+
+	def _sha256_bytes_of_data(self, data_bytes):
+		"""Return SHA-256 digest (bytes) of a bytes-like object."""
+		h = hashlib.sha256()
+		# MicroPython can handle big updates; still keep it simple
+		h.update(data_bytes)
+		return h.digest()
+
+	def _sha256_bytes_of_file(self, path, chunk_size=4096):
+		"""Return SHA-256 digest (bytes) of a file, or None if file doesn't exist."""
+		try:
+			st = os.stat(path)
+		except:
+			return None
+		h = hashlib.sha256()
+		try:
+			with open(path, "rb") as f:
+				while True:
+					chunk = f.read(chunk_size)
+					if not chunk:
+						break
+					h.update(chunk)
+			return h.digest()
+		except:
+			return None
+
+	def _digest_to_hex(self, digest_bytes):
+		"""Hex string for logging/UX (not stored)."""
+		return binascii.hexlify(digest_bytes).decode("ascii")
+
 
 	def info(self, msg):
 		_info(msg)
@@ -216,32 +261,43 @@ label {{ display:block; margin-top: 10px; }}
 				temp_config = Settings(profile)
 				details = temp_config.persistent
 			fields = ""
-			for k, v in details.items():
-				if isinstance(v, bool):
-					true_checked = " checked" if v else ""
-					false_checked = " checked" if not v else ""
-					fields += (
-						"<label>{}:<br>"
-						"<input type='radio' name='{}' value='True'{}> True "
-						"<input type='radio' name='{}' value='False'{}> False"
-						"</label>".format(k, k, true_checked, k, false_checked)
-					)
-				elif isinstance(v, list):
-					value_str = ",".join(str(item) for item in v)
-					input_type = "password" if k in Settings.masked_values else "text"
-					fields += (
-						"<label>{}:"
-						"<input type='{}' name='{}' value='{}' autocapitalize='none'>"
-						"</label>".format(k, input_type, k, value_str)
-					)
-				else:
-					input_type = "password" if k in Settings.masked_values else "text"
-					fields += (
-						"<label>{}:"
-						"<input type='{}' name='{}' value='{}' autocapitalize='none'>"
-						"</label>".format(k, input_type, k, v)
-					)
-			
+
+			for name, section in field_display.items():
+				for field in section:
+					if field in details:
+						k = field
+						v = details[field]
+						
+
+						# for k, v in details.items():
+						if isinstance(v, bool):
+							true_checked = " checked" if v else ""
+							false_checked = " checked" if not v else ""
+							fields += (
+								"<label>{}:<br>"
+								"<input type='radio' name='{}' value='True'{}> True "
+								"<input type='radio' name='{}' value='False'{}> False"
+								"</label>".format(k, k, true_checked, k, false_checked)
+							)
+						elif isinstance(v, list):
+							value_str = ",".join(str(item) for item in v)
+							input_type = "password" if k in Settings.masked_values else "text"
+							fields += (
+								"<label>{}:"
+								"<input type='{}' name='{}' value='{}' autocapitalize='none'>"
+								"</label>".format(k, input_type, k, value_str)
+							)
+						else:
+							input_type = "password" if k in Settings.masked_values else "text"
+							fields += (
+								"<label>{}:"
+								"<input type='{}' name='{}' value='{}' autocapitalize='none'>"
+								"</label>".format(k, input_type, k, v)
+							)
+
+				# add a horizontal line after each section
+				fields += "<hr style='margin:15px 0;'>"
+
 			# Add "New Profile Name" field
 			fields += (
 				"<label>New Profile Name:"
@@ -250,7 +306,7 @@ label {{ display:block; margin-top: 10px; }}
 			)
 
 			body = """
-			<h2>Edit {}</h2>
+			<h2>Edit profile: {}</h2>
 			<form method="POST" action="/update/{}">
 				{}
 				<div style="margin-top:10px;">
@@ -261,63 +317,6 @@ label {{ display:block; margin-top: 10px; }}
 			""".format(profile, profile, fields)
 			self.info("Edit page for profile '{}' served to {}".format(profile, request.client_addr))
 			return self._html_page("Edit {}".format(profile), body)
-
-
-		# @self.route("/edit/<profile>")
-		# async def edit_profile(request, profile):
-		# 	field_order = [ "wifi_ssid", "wifi_secret", "", "ha_topic", "ha_config", "mqtt_server", "mqtt_ssl", "mqtt_username", "mqtt_password", "", "timezone", "ntp_servers", "ntp_interval" ]
-		# 	if not self._require_auth(request):
-		# 		return microdot.Response.redirect("/")
-		# 	if profile == getattr(config, 'profile', None):
-		# 		details = config.persistent
-		# 	else:
-		# 		temp_config = Settings(profile)
-		# 		details = temp_config.persistent
-		# 	fields = ""
-		# 	for field_name in field_order:
-		# 		if not field_name:
-		# 			fields += "<hr style='border: 2px solid black; margin-top: 20px; margin-bottom: 20px;'>"
-		# 			continue
-		# 		if field_name not in details:
-		# 			continue
-		# 		k = field_name
-		# 		v = details[k]
-		# 		# Boolean values -> radio buttons
-		# 		if isinstance(v, bool):
-		# 			true_checked = " checked" if v else ""
-		# 			false_checked = " checked" if not v else ""
-		# 			fields += (
-		# 				"<label>{}:<br>"
-		# 				"<input type='radio' name='{}' value='True'{}> True "
-		# 				"<input type='radio' name='{}' value='False'{}> False"
-		# 				"</label>".format(k, k, true_checked, k, false_checked)
-		# 			)
-		# 		# Lists -> comma-separated string
-		# 		elif isinstance(v, list):
-		# 			value_str = ",".join(str(item) for item in v)
-		# 			input_type = "password" if k in Settings.masked_values else "text"
-		# 			fields += (
-		# 				"<label>{}:"
-		# 				"<input type='{}' name='{}' value='{}' autocapitalize='none'>"
-		# 				"</label>".format(k, input_type, k, value_str)
-		# 			)
-		# 		# Everything else -> normal input
-		# 		else:
-		# 			input_type = "password" if k in Settings.masked_values else "text"
-		# 			fields += (
-		# 				"<label>{}:"
-		# 				"<input type='{}' name='{}' value='{}' autocapitalize='none'>"
-		# 				"</label>".format(k, input_type, k, v)
-		# 			)
-		# 	body = """
-		# 	<h2>Profile: {}</h2>
-		# 	<form method="POST" action="/update/{}">
-		# 		{}
-		# 		<input type="submit" value="Set as Default">
-		# 	</form>
-		# 	""".format(profile, profile, fields)
-		# 	self.info("Edit page for profile '{}' served to {}".format(profile, request.client_addr))
-		# 	return self._html_page("Edit {}".format(profile), body)
 
 
 		@self.route("/update/<profile>", methods=["POST"])
@@ -352,6 +351,8 @@ label {{ display:block; margin-top: 10px; }}
 					target_config.persistent[k] = True if v == "True" else False
 				elif isinstance(orig_val, list):
 					target_config.persistent[k] = [item.strip() for item in v.split(",") if item.strip()]
+				elif isinstance(orig_val, int):
+					target_config.persistent[k] = int(v)
 				else:
 					target_config.persistent[k] = v
 
@@ -359,8 +360,13 @@ label {{ display:block; margin-top: 10px; }}
 			#print("updated_target_config_saved.raw_state: ", target_config.saved.raw_state)
 			
 			target_config.save()
-			self.info("Profile '{}' updated".format(profile))
+			self.info("Profile updated: {}".format(profile))
 			config_changed.set()
+
+			# TODO: Change so that when a new profile name is specified try to save the current profile as that new profile
+			#       If update button pressed, just update, if set as default is pressed, make it the default too
+			#
+			#
 
 			# Handle "Set as Default" action
 			if action == "Set as Default":
@@ -376,52 +382,21 @@ label {{ display:block; margin-top: 10px; }}
 
 			return microdot.Response.redirect("/profiles")
 
-
-		# @self.route("/update/<profile>", methods=["POST"])
-		# async def update_profile(request, profile):
-		# 	if not self._require_auth(request):
-		# 		return microdot.Response.redirect("/")
-		# 	if profile == getattr(config, 'profile', None):
-		# 		target_config = config
-		# 	else:
-		# 		target_config = Settings(profile)
-			
-		# 	for k, v in request.form.items():
-		# 		orig_val = target_config.persistent.get(k)
-		# 		# Convert strings back to original type
-		# 		if isinstance(orig_val, bool):
-		# 			if type(v) is str:
-		# 				target_config.persistent[k] = True if v == "True" else False
-		# 			else:
-		# 				target_config.persistent[k] = v
-		# 		elif isinstance(orig_val, list):
-		# 			print(v, orig_val, request.form)
-		# 			if type(v) is str:
-		# 				target_config.persistent[k] = [item.strip() for item in v.split(",") if item.strip()]
-		# 			else:
-		# 				target_config.persistent[k] = v
-		# 		else:
-		# 			target_config.persistent[k] = v
-			
-		# 	target_config.save()
-		# 	self.info("Profile '{}' updated".format(profile))
-		# 	if profile != getattr(config, 'profile', None):
-		# 		config.set_as_default(profile)
-		# 		self.info("Profile '{}' set as default".format(profile))
-		# 	return microdot.Response.redirect("/profiles")
-
 		@self.route("/delete/<profile>", methods=["POST"])
 		async def delete_profile(request, profile):
 			if not self._require_auth(request):
 				return microdot.Response.redirect("/")
-			fname = "sensor.profile.{}".format(profile)
-			if fname in os.listdir():
-				try:
-					os.remove(fname)
-					self.info("Profile '{}' deleted".format(profile))
-				except Exception as e:
-					self.error("Failed to delete profile '{}': {}".format(profile, e))
-			return "OK"
+			if profile == espMAC:
+				profile_to_delete = config
+			else:
+				profile_to_delete = Settings(profile)
+
+			if profile_to_delete.delete():
+				self.info("Profile '{}' deleted".format(profile))
+				return "OK"
+			else:
+				self.info("Profile '{}' not deleted".format(profile))
+				return "OK"
 
 		@self.route("/reboot")
 		async def reboot_page(request):
@@ -440,6 +415,133 @@ label {{ display:block; margin-top: 10px; }}
 		async def captive_redirect(request):
 			self.info("Captive portal redirect from {}".format(request.client_addr))
 			return microdot.Response.redirect("/")
+
+		@self.route("/upload/<filename>", methods=["GET", "POST"])
+		async def upload_file(request, filename):
+			if not self._require_auth(request):
+				return microdot.Response.redirect("/")
+
+			# Basic HTML helper for responses
+			def result_page(title, msg_html):
+				return self._html_page(title, "<h2>{}</h2><div>{}</div>".format(title, msg_html))
+
+			if request.method == "GET":
+				# Minimal upload UI that sends RAW bytes (not multipart)
+				safe_name = ""
+				try:
+					safe_name = self._sanitize_filename(filename)
+				except Exception as e:
+					return result_page("Upload Error", "Invalid filename: {}".format(e))
+
+				body = """
+				<h2>Upload File: {fname}</h2>
+				<p>This form sends the file as raw bytes to <code>/upload/{fname}</code>. Works for .py and .mpy.</p>
+				<input type="file" id="file" />
+				<button id="send">Upload</button>
+				<pre id="out" style="white-space:pre-wrap;background:#f5f5f5;padding:8px;"></pre>
+				<script>
+				const btn = document.getElementById('send');
+				const out = document.getElementById('out');
+				btn.onclick = async () => {{
+					const f = document.getElementById('file').files[0];
+					if (!f) {{ out.textContent = "Choose a file first."; return; }}
+					try {{
+						const buf = await f.arrayBuffer();
+						const resp = await fetch("/upload/{fname}", {{
+							method: "POST",
+							headers: {{"Content-Type":"application/octet-stream"}},
+							body: buf
+						}});
+						out.textContent = await resp.text();
+					}} catch (e) {{
+						out.textContent = "Upload failed: " + e;
+					}}
+				}};
+				</script>
+				""".format(fname=safe_name)
+				return self._html_page("Upload {}".format(safe_name), body)
+
+			# POST path: accept raw bytes and write if different
+			try:
+				safe_name = self._sanitize_filename(filename)
+			except Exception as e:
+				self.error("Upload rejected (bad filename '{}'): {}".format(filename, e))
+				return result_page("Upload Error", "Invalid filename: {}".format(e))
+
+			# Read raw request body (should be bytes)
+			data = request.body
+			if data is None:
+				# Some microdot builds might expose .body as None with small posts; try .stream.read()
+				try:
+					data = request.stream.read()
+				except:
+					data = None
+
+			if not data:
+				return result_page("Upload Error", "No data received. Send raw bytes (Content-Type: application/octet-stream).")
+
+			# Compute incoming hash
+			in_digest = self._sha256_bytes_of_data(data)
+			in_hex = self._digest_to_hex(in_digest)
+
+			# Compare with existing file if present
+			existing_digest = self._sha256_bytes_of_file(safe_name)
+			if existing_digest is not None and existing_digest == in_digest:
+				self.info("Upload skipped: '{}' unchanged (sha256={})".format(safe_name, in_hex[:16] + "..."))
+				# Return SHA-256 as plain text
+				return microdot.Response(self._digest_to_hex(existing_digest), content_type="text/plain")
+
+			# Write atomically via temp file then rename
+			tmp_name = safe_name + ".tmp"
+			try:
+				with open(tmp_name, "wb") as f:
+					f.write(data)
+					f.flush()
+				# Remove existing target if present to avoid rename errors on some FS
+				try:
+					os.remove(safe_name)
+				except:
+					pass
+				os.rename(tmp_name, safe_name)
+			except Exception as e:
+				# cleanup temp
+				try:
+					os.remove(tmp_name)
+				except:
+					pass
+				self.error("Upload failed for '{}': {}".format(safe_name, e))
+				return microdot.Response("Failed to write file: {}".format(e), status_code=500)
+
+			# Optional: free RAM after big upload
+			try:
+				del data
+				gc.collect()
+			except:
+				pass
+
+			self.info("Uploaded '{}' (sha256={})".format(safe_name, in_hex[:16] + "..."))
+			# Return SHA-256 of the newly written file
+			return microdot.Response(in_hex, content_type="text/plain")
+
+		@self.route("/sha256/<filename>")
+		async def sha256_query(request, filename):
+			if not self._require_auth(request):
+				return microdot.Response.redirect("/")
+
+			try:
+				safe_name = self._sanitize_filename(filename)
+			except Exception as e:
+				return microdot.Response("Invalid filename", status_code=400)
+
+			digest = self._sha256_bytes_of_file(safe_name)
+			if digest is None:
+				return microdot.Response("File not found", status_code=404)
+
+			hexval = self._digest_to_hex(digest)
+			self.info("SHA256({}) = {}".format(safe_name, hexval))
+
+			# Plain text output
+			return microdot.Response(hexval)
 
 	def _login_form(self):
 		return """

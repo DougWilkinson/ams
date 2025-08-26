@@ -6,7 +6,7 @@ versions[__name__] = 1
 from network import WLAN, STA_IF, AP_IF, STAT_NO_AP_FOUND, STAT_WRONG_PASSWORD, STAT_GOT_IP, STAT_CONNECTING
 from time import sleep, sleep_ms, ticks_ms
 from settings import config, info, error, debug, start, reboot
-from blinkled import on_led, off_led
+from blinkled import on_led, off_led, wifi_status
 from events import wifi_connected, config_changed, low_power
 import socket
 
@@ -29,7 +29,10 @@ info("wifi: hostname: {}".format(config.hostname) )
 info("wifi: ssid: {}".format(config.wifi_ssid) )
 
 wlan = WLAN(STA_IF)
-wlan.active(True)
+wlan.active(False)
+
+# add blinkled to event loop
+asyncio.create_task(wifi_status(wlan))
 
 essid = wlan.config('essid')
 retries = 0
@@ -38,15 +41,12 @@ def wifi_connect():
 	# don't connect if no ssid given
 	if config.wifi_ssid != "":
 		# if wifi name is same and already connected, don't reconnect
-		if config.wifi_ssid == essid and wlan.isconnected():
+		if config.wifi_ssid == essid and wlan.isconnected() and wlan.config('dhcp_hostname') == config.hostname:
 			return
-
-		wlan.config(dhcp_hostname=config.hostname)
-		wlan.disconnect()
-		wlan.active(False)
-		sleep(0.1)
 		wlan.active(True)
 		sleep(0.5)
+		wlan.disconnect()
+		wlan.config(dhcp_hostname=config.hostname)
 
 		# Connect to configured network with creds only if something changed or initial boot
 		if config.wifi_ssid != essid or config_changed.is_set():
@@ -94,6 +94,11 @@ async def wifi():
 
 					versions["ipv4"] = list(wlan.ifconfig())[0]
 					versions["signal"] = wlan.status('rssi')
+				
+				if config.hostname != wlan.config('dhcp_hostname'):
+					error("wifi: changing hostname from {} to {}".format(wlan.config('dhcp_hostname'), config.hostname))
+					wlan.disconnect()
+
 				await asyncio.sleep(1)
 			
 			await asyncio.sleep(1)
