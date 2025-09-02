@@ -6,7 +6,7 @@ versions[__name__] = 1
 from machine import Pin, TouchPad
 from device import Device
 import time
-from settings import info
+from logger import info
 import asyncio
 
 class TouchPin:

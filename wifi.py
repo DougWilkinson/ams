@@ -5,7 +5,8 @@ versions[__name__] = 1
 
 from network import WLAN, STA_IF, AP_IF, STAT_NO_AP_FOUND, STAT_WRONG_PASSWORD, STAT_GOT_IP, STAT_CONNECTING
 from time import sleep, sleep_ms, ticks_ms
-from settings import config, info, error, debug, start, reboot
+from system import config, start, reboot
+from logger import info, error, debug
 from blinkled import on_led, off_led, wifi_status
 from events import wifi_connected, config_changed, low_power
 import socket
@@ -87,6 +88,14 @@ async def wifi():
 	while True:
 		# try:
 			while wlan.isconnected() and wlan.status() == STAT_GOT_IP:
+				
+				# set last known good wifi in non-persistent memory
+				# used later to determine if wifi suspected to be misconfigured
+				# if it worked since the last boot, probably still good
+				# wait for it to come back online, could be wireless rebooting
+
+				config.last_wifi_ssid = config.wifi_ssid
+
 				if not wifi_connected.is_set(): 
 					retries = 0
 					wifi_connected.set()

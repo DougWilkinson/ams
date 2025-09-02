@@ -11,8 +11,10 @@ import time
 from gc import collect
 from machine import RTC
 
-from settings import info, error, debug, start
-from settings import config, espMAC, strftime
+from logger import info, error, debug
+from profiles import espMAC
+from system import config, start
+from logger import strftime
 
 from events import wifi_connected, time_synced
 
@@ -49,7 +51,7 @@ async def publish_state(device):
 	info("hass: {}: publish_state_handler running".format(device.name) )
 	while True:
 		await device.publish.wait()
-		debug("pubstate: {}, {}, pubflag: {}".format(device.name,device.state, device.publish.is_set()))
+		debug("pubstate: {}, {}, pubflag: {}".format(device.name,device.state, device.publish.is_set() ) )
 		publish_queue.put(gen_topic(device,"/state"), device.state.lower() if device.set_lower else device.state)
 
 		if hasattr(device, 'attr'):
@@ -233,6 +235,7 @@ async def mqtt():
 				client.server = config.mqtt_server
 				client.user = config.mqtt_username
 				client.pswd = config.mqtt_password
+				client.ssl_params = ssl_params
 
 			except:
 				error("hass: mqtt: bad mqtt config options - waiting for config change")

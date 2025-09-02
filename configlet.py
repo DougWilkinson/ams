@@ -6,7 +6,7 @@ versions[__name__] = 1
 from appserver import app, Response
 import asyncio
 
-from settings import config, info, error, debug, start, masked_values
+from system import config, info, error, debug, start, masked_values
 # from microdot import Microdot, Response
 # import network
 import re  # MicroPython regex

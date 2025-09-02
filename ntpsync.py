@@ -6,7 +6,8 @@ versions[__name__] = 1
 import time
 import ntptime
 
-from settings import info, error, config, start
+from system import config, start
+from logger import info, error
 
 from events import time_synced
 import asyncio

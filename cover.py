@@ -4,10 +4,13 @@ from versions import versions
 versions[__name__] = 3
 # 2011: Super class for limit and encoder
 
+#########################################
+##  NEEDS TO BE CHANGED TO USE NEW DEVICE SAVE FEATURE
+
 from machine import Pin
 import time
 from core import info, error, debug, load_config
-from settings import save_json
+from system import save_json
 from device import Device
 import asyncio
 from hass import ha_setup

@@ -4,15 +4,18 @@ from versions import versions
 versions[__name__[2:-2]] = 3
 
 import webrepl
-from settings import config, espMAC, reboot
-from settings import info, error, debug, start
+
+# reboot not used here, but used in webrepl, leave it!
+from system import config, espMAC, reboot
+
+from logger import info, error
 
 import asyncio
 from time import sleep
 
 import wifi
 
-if config.boot == 2:
+if config.boot_mode == 2:
 	raise Exception("SafeBoot enabled - use reboot() to reset boot mode")
 
 # import modules - each module should only do bare minimum when being imported
@@ -44,14 +47,20 @@ if espMAC == config.hostname:
 
 	
 # wait for netrepl to connect or 20 seconds
-if config.boot == 3:
+if config.boot_mode == 3:
 	delay = 20
 	while delay > 0 and webrepl.client_s is None:
 		sleep(1)
 		delay -= 1
 
-# if device unexpectedly reboots, make sure it starts immediately
-config.boot = 0
+# Only count reboots if power on or unexpected
+if config.boot_mode == 0:
+	config.reboots += 1
+
+# boot mode 0 = power on or unexpected reboot
+# set here for next potential unexpected reboot
+# all other restarts are done through reboot() function
+config.boot_mode = 0
 
 info("main: starting apps")
 

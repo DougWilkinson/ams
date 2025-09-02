@@ -1,7 +1,7 @@
 # menu.py
 
 import asyncio
-from settings import info, error, debug
+from logger import info, error, debug
 import time
 
 # Simple 2 button menu logic to create a menu and navigate

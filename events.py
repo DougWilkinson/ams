@@ -15,6 +15,9 @@ wifi_bad_password = asyncio.Event()
 
 # modules that use config settings should reapply configs when this is set
 config_changed = asyncio.Event()
+config_wifi_changed = asyncio.Event()
+config_timezone_changed = asyncio.Event()
+config_mqtt_changed = asyncio.Event()
 
 mqtt_connected = asyncio.Event()
 

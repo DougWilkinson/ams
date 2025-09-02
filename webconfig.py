@@ -1,7 +1,8 @@
 # webconfig.py
 
 from versions import versions
-versions[__name__] = 1
+versions[__name__] = 2
+# 2: supported profiles and logger split
 
 # captive_portal_server.py
 import os
@@ -9,11 +10,15 @@ import gc
 import time
 import sys
 import microdot
-from settings import config, get_profiles, Settings, strftime, espMAC, field_display
-from settings import info as _info
-from settings import error as _error
+from sse import with_sse
+from system import config, reboot
+from profiles import Profile, get_profiles, profile_field_display, espMAC, delete_profile_by_name
+from logger import info as _info
+from logger import error as _error
+from logger import logger
 from events import config_changed
 import machine
+import asyncio
 
 import hashlib
 import binascii
@@ -21,13 +26,9 @@ import binascii
 microdot.Response.default_content_type = "text/html"
 
 class CaptivePortalServer(microdot.Microdot):
-	def __init__(self, password=None):
+	def __init__(self):
 		super().__init__()
-		if password is None:
-			password = config.persistent.get("device_password", "")
-		self.password = password
 		self.sessions = set()
-		self.info("Server initialized with password length: {}".format(len(self.password)))
 		self._setup_routes()
 
 	def _sanitize_filename(self, name):
@@ -105,7 +106,7 @@ label {{ display:block; margin-top: 10px; }}
 		async def login(request):
 			if request.method == "POST":
 				pwd = request.form.get("password", "")
-				if pwd == self.password:
+				if pwd == config.password:
 					token = str(id(request))
 					self.sessions.add(token)
 					resp = microdot.Response.redirect("/home")
@@ -165,7 +166,7 @@ label {{ display:block; margin-top: 10px; }}
 
 			# Build aligned info table
 			info_rows = [
-				("Current Profile", getattr(config, 'profile', 'default')),
+				("Current Profile", getattr(config, 'saved_from_profile', 'default')),
 				("MicroPython Version", mp_version),
 				("Memory Used/Total", "{} KB / {} KB ({}%)".format(mem_used_kb, mem_total_kb, mem_used_pct)),
 				("Flash Used/Total", "{} KB / {} KB ({}%)".format(flash_used_kb, flash_total_kb, flash_used_pct)),
@@ -220,10 +221,12 @@ label {{ display:block; margin-top: 10px; }}
 			if not self._require_auth(request):
 				return microdot.Response.redirect("/")
 			profiles = get_profiles()
-			current_profile = getattr(config, 'profile', None)
+			for i in range(len(profiles)):
+				if profiles[i] == espMAC:
+					profiles[i] = "default"
 			options = "".join(
 				"<option value='{}'{}>{}</option>".format(
-					p, " selected" if p == current_profile else "", p
+					p, " selected" if p == "default" else "", p
 				) for p in profiles
 			)
 			body = """
@@ -232,37 +235,63 @@ label {{ display:block; margin-top: 10px; }}
 			<div style="display:flex;gap:10px;">
 				<button onclick="editProfile()">Edit</button>
 				<button onclick="deleteProfile()">Delete</button>
+				<button onclick="activateProfile()">Activate</button>
 			</div>
 			<script>
 			function editProfile() {{
 				let p = document.getElementById('profileSelect').value;
 				if(p) window.location.href = '/edit/' + encodeURIComponent(p);
 			}}
+			function activateProfile() {{
+				let p = document.getElementById('profileSelect').value;
+				if (p == 'default' && confirm('default is the active profile')) return;
+				if(p) window.location.href = '/activate/' + encodeURIComponent(p);
+			}}
 			function deleteProfile() {{
 				let p = document.getElementById('profileSelect').value;
-				if(p && confirm('Delete profile ' + p + '?')) {{
-					fetch('/delete/' + encodeURIComponent(p), {{method:'POST'}})
-					.then(() => location.reload());
+				if (p) {{
+					let msg = (p === "default")
+						? "Reset to factory default?"
+						: "Delete profile " + p + "?";
+					if (confirm(msg)) {{
+						fetch('/delete/' + encodeURIComponent(p), {{method:'POST'}})
+						.then(() => location.reload());
+					}}
 				}}
 			}}
 			</script>
-			""".format(options)
+			""".format(options, "default")
 			self.info("Profiles page served to {}".format(request.client_addr))
 			return self._html_page("Profiles", body)
+
+		@self.route("/activate/<profile>")
+		async def setdefault_profile(request, profile):
+			if not self._require_auth(request):
+				return microdot.Response.redirect("/")
+
+			# Already checked for trying to set default as active above
+			# go ahead and set the selected one
+						
+			self.info("Setting profile '{}' as active".format(profile))
+
+			config.set_as_default(profile)
+
+			return microdot.Response.redirect("/")
 
 
 		@self.route("/edit/<profile>")
 		async def edit_profile(request, profile):
 			if not self._require_auth(request):
 				return microdot.Response.redirect("/")
-			if profile == getattr(config, 'profile', None):
+			
+			if profile == "default":
 				details = config.persistent
 			else:
-				temp_config = Settings(profile)
+				temp_config = Profile(profile)
 				details = temp_config.persistent
 			fields = ""
 
-			for name, section in field_display.items():
+			for name, section in profile_field_display.items():
 				for field in section:
 					if field in details:
 						k = field
@@ -281,14 +310,14 @@ label {{ display:block; margin-top: 10px; }}
 							)
 						elif isinstance(v, list):
 							value_str = ",".join(str(item) for item in v)
-							input_type = "password" if k in Settings.masked_values else "text"
+							input_type = "password" if k in Profile.masked_values else "text"
 							fields += (
 								"<label>{}:"
 								"<input type='{}' name='{}' value='{}' autocapitalize='none'>"
 								"</label>".format(k, input_type, k, value_str)
 							)
 						else:
-							input_type = "password" if k in Settings.masked_values else "text"
+							input_type = "password" if k in Profile.masked_values else "text"
 							fields += (
 								"<label>{}:"
 								"<input type='{}' name='{}' value='{}' autocapitalize='none'>"
@@ -310,8 +339,8 @@ label {{ display:block; margin-top: 10px; }}
 			<form method="POST" action="/update/{}">
 				{}
 				<div style="margin-top:10px;">
-					<input type="submit" name="_action" value="Update">
-					<input type="submit" name="_action" value="Set as Default">
+					<input type="submit" name="_action" value="Save">
+					<input type="submit" name="_action" value="Cancel">
 				</div>
 			</form>
 			""".format(profile, profile, fields)
@@ -324,16 +353,24 @@ label {{ display:block; margin-top: 10px; }}
 			if not self._require_auth(request):
 				return microdot.Response.redirect("/")
 
-			new_profile_name = request.form.get("_new_profile", "").strip()
-			self.info("new_profile_name: {}".format(new_profile_name) )
-			
-			action = request.form.get("_action", "Update")
+			new_profile_name = request.form.get("_new_profile", "").strip().lower()
+
+			action = request.form.get("_action", "Cancel")
 			self.info("action: {}".format(action) )
 
-			if profile == getattr(config, 'profile', None):
+			if action == "Cancel" or new_profile_name == "default":
+				return microdot.Response.redirect("/profiles")
+			
+			if new_profile_name:
+				self.info("new_profile_name: {}".format(new_profile_name) )
+
+			if profile == "default":
 				target_config = config
 			else:
-				target_config = Settings(profile)
+				target_config = Profile(profile)
+
+			# set to true later if one of the settings changed to avoid unnecessary saves
+			something_changed = False
 
 			# Update fields from form
 			for k, v in request.form.items():
@@ -356,56 +393,75 @@ label {{ display:block; margin-top: 10px; }}
 				else:
 					target_config.persistent[k] = v
 
+				if orig_val != target_config.persistent[k]:
+					something_changed = True
+
 			#print("updated_target_config_persistent: ", target_config.persistent)
 			#print("updated_target_config_saved.raw_state: ", target_config.saved.raw_state)
 			
-			target_config.save()
-			self.info("Profile updated: {}".format(profile))
-			config_changed.set()
-
-			# TODO: Change so that when a new profile name is specified try to save the current profile as that new profile
-			#       If update button pressed, just update, if set as default is pressed, make it the default too
-			#
-			#
+			if something_changed:
+				target_config.save()
+				self.info("Profile updated: {}".format(profile))
+				
+				if profile == "default":
+					# notify other modules that the config has changed
+					config_changed.set()
 
 			# Handle "Set as Default" action
-			if action == "Set as Default":
-				if new_profile_name:
-					new_cfg = Settings(new_profile_name)
-					new_cfg.persistent.update(target_config.persistent)
-					new_cfg.save()
-					config.set_as_default(new_profile_name)
-					self.info("New profile '{}' created and set as default".format(new_profile_name))
-				else:
-					config.set_as_default(profile)
-					self.info("Profile '{}' set as default".format(profile))
+			if new_profile_name:
+				target_config.save_as(new_profile_name)
+				self.info("New profile '{}' created".format(new_profile_name))
 
-			return microdot.Response.redirect("/profiles")
+			return microdot.Response.redirect("/home")
 
 		@self.route("/delete/<profile>", methods=["POST"])
 		async def delete_profile(request, profile):
 			if not self._require_auth(request):
 				return microdot.Response.redirect("/")
-			if profile == espMAC:
-				profile_to_delete = config
-			else:
-				profile_to_delete = Settings(profile)
 
-			if profile_to_delete.delete():
-				self.info("Profile '{}' deleted".format(profile))
-				return "OK"
-			else:
-				self.info("Profile '{}' not deleted".format(profile))
-				return "OK"
+			delete_profile_by_name(profile)
+			return microdot.Response.redirect("/profiles")
+
+		# @self.route("/reboot")
+		# async def reboot_page(request):
+		# 	if not self._require_auth(request):
+		# 		return microdot.Response.redirect("/")
+		# 	from system import reboot
+		# 	self.info("Reboot requested by {}".format(request.client_addr))
+		# 	reboot()
+		# 	return self._html_page("Reboot", "<h2>Rebooting...</h2>")
 
 		@self.route("/reboot")
 		async def reboot_page(request):
 			if not self._require_auth(request):
 				return microdot.Response.redirect("/")
-			from settings import reboot
-			self.info("Reboot requested by {}".format(request.client_addr))
-			reboot()
-			return self._html_page("Reboot", "<h2>Rebooting...</h2>")
+
+			# Reboot countdown page
+			body = """
+			<h2>Rebooting...</h2>
+			<p>Device will reboot in <span id="countdown">10</span> seconds.</p>
+			<script>
+			let counter = 10;
+			let timer = setInterval(function() {
+				counter--;
+				document.getElementById('countdown').innerText = counter;
+				if (counter <= 0) {
+					clearInterval(timer);
+					window.location.href = "/";
+				}
+			}, 1000);
+			</script>
+			"""
+
+			# Schedule actual device reboot after response is sent
+			async def do_reboot():
+				await asyncio.sleep(1)  # let page flush to client
+				reboot(0)
+
+			asyncio.create_task(do_reboot())
+
+			return self._html_page("Reboot", body)
+
 
 		# Captive portal triggers
 		@self.route("/generate_204")
@@ -487,9 +543,10 @@ label {{ display:block; margin-top: 10px; }}
 			# Compare with existing file if present
 			existing_digest = self._sha256_bytes_of_file(safe_name)
 			if existing_digest is not None and existing_digest == in_digest:
-				self.info("Upload skipped: '{}' unchanged (sha256={})".format(safe_name, in_hex[:16] + "..."))
-				# Return SHA-256 as plain text
-				return microdot.Response(self._digest_to_hex(existing_digest), content_type="text/plain")
+				self.info("Upload skipped: '{}' unchanged (sha256={})".format( safe_name, in_hex[:16] + "..." ))
+
+				return microdot.Response(self._digest_to_hex(existing_digest),
+										headers={"Content-Type": "text/plain"})
 
 			# Write atomically via temp file then rename
 			tmp_name = safe_name + ".tmp"
@@ -520,8 +577,24 @@ label {{ display:block; margin-top: 10px; }}
 				pass
 
 			self.info("Uploaded '{}' (sha256={})".format(safe_name, in_hex[:16] + "..."))
-			# Return SHA-256 of the newly written file
-			return microdot.Response(in_hex, content_type="text/plain")
+			return microdot.Response(in_hex, headers={"Content-Type": "text/plain"})
+
+		@self.route("/remove/<filename>")
+		async def remove_file(request, filename):
+			if not self._require_auth(request):
+				return microdot.Response.redirect("/")
+
+			try:
+				safe_name = self._sanitize_filename(filename)
+			except Exception as e:
+				return microdot.Response("Invalid filename", status_code=400)
+
+			if os.path.exists(safe_name):
+				os.remove(safe_name)
+				self.info("Removed '{}'".format(safe_name))
+				return microdot.Response("Removed '{}'".format(safe_name), headers={"Content-Type": "text/plain"})
+			else:
+				return microdot.Response("File not found", status_code=404)
 
 		@self.route("/sha256/<filename>")
 		async def sha256_query(request, filename):
@@ -541,7 +614,50 @@ label {{ display:block; margin-top: 10px; }}
 			self.info("SHA256({}) = {}".format(safe_name, hexval))
 
 			# Plain text output
-			return microdot.Response(hexval)
+			return microdot.Response(hexval, headers={"Content-Type": "text/plain"})
+
+
+		# @self.route('/tail_console')
+		# async def tail_console(request):
+
+		# 	if not self._require_auth(request):
+		# 		return microdot.Response.redirect("/")
+
+		# 	async def event_stream():
+		# 		# send buffer as lines are added
+		# 		async for line in logger.console_history:
+		# 			yield f"data: {line}\n"
+
+		# 	return microdot.Response(body=event_stream(), headers={'Content-Type': 'text/event-stream' } )
+
+		@self.route('/tail_console')
+		@with_sse
+		async def tail_console(request, sse):
+			if not self._require_auth(request):
+				return microdot.Response('Unauthorized', status_code=401)
+
+			try:
+				async for line in logger.console_history:
+					await sse.send( line.strip() )
+					await sse.send( "" )
+
+			except asyncio.CancelledError:
+				print("tail_console: client disconnected")
+
+			# async def event_stream():
+			# 	async for line in logger.console_history:
+			# 		print("line: ", line)
+			# 		yield f"data: {line}\n\n"  # <-- double newline required
+			# 		# await asyncio.sleep(0.1)     # allow MicroPython to switch tasks
+
+			# headers = {
+			# 	'Content-Type': 'text/event-stream',
+			# 	'Cache-Control': 'no-cache',
+			# 	'Connection': 'keep-alive',
+			# 	'Access-Control-Allow-Credentials': 'true',
+			# }
+
+			# return microdot.Response(body=log, headers=headers)
 
 	def _login_form(self):
 		return """
@@ -551,7 +667,6 @@ label {{ display:block; margin-top: 10px; }}
 			<input type="submit" value="Login">
 		</form>
 		"""
-
-
+	
 # Instantiate for external startup
 app = CaptivePortalServer()

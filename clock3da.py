@@ -9,7 +9,9 @@ clock_color = 1
 # Leave above when transfering from PC version
 
 import asyncio
-from settings import debug, offset_time, config
+from logger import info, error, debug
+from localtime import offset_time
+from system import config
 from events import low_power
 
 from math import sin, cos

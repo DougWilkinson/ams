@@ -1,4 +1,4 @@
-factory_defaults = {"saved_from_profile": "", 
+factory_defaults = {"saved_from_profile": "default", 
 				"log": 7, 
 				"timezone": 19, 
 				"hostname": "",
@@ -13,6 +13,7 @@ factory_defaults = {"saved_from_profile": "",
 				"ntp_servers": [],
 				"ntp_interval": 60,
 				"wifi": True,
-				"module_hass": False,
-				"last_exception": ""
+				"module_hass": True,
+				"last_exception": "",
+				"password": "",
 				}

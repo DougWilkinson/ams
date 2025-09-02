@@ -9,7 +9,9 @@ import asyncio
 import time
 
 from hass import subscribe_name
-from settings import info, debug, error, config, start, get_profiles
+from system import config, start
+from profiles import get_profiles
+from logger import info, debug, error
 from touchpin import TouchPin
 from sh1106 import SH1106_I2C
 from clock3da import Clock3D
