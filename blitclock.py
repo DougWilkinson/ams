@@ -1,8 +1,8 @@
 # blitclock.py
 
 from versions import versions
-versions[__name__] = 4
-# 200: async version with oled type in params
+versions[__name__] = 5
+# 5: support for gc9a01 driver (round display)
 
 from time import sleep_ms, ticks_ms
 from machine import RTC
@@ -11,7 +11,8 @@ import array
 import math
 import json
 import asyncio
-from core import offset_time, exceptions, info
+from localtime import offset_time
+from logger import info, error
 from random import randint
 from device import Device
 from hass import ha_setup
@@ -41,7 +42,8 @@ class BlitClock:
 
 		asyncio.create_task(self.onoff_handler())
 		asyncio.create_task(self.clock_handler())
-		asyncio.create_task(self.text_handler())
+		if text:
+			asyncio.create_task(self.text_handler())
 
 	async def onoff_handler(self):
 		async for _ , ev in self.onoff.q:
@@ -138,7 +140,10 @@ class BlitClock:
 						es=ticks_ms()
 						angle_second = second * 6 + ( i * 2)
 						self.update_hand(self.s_hand_fb, angle_second, fraction=0.8, color=self.color)
-						self.draw_text(self.s_hand_fb, 60, 190, "{}:{:0>2}:{:0>2}".format(hour,minute,second), 63)
+
+						if self.text:
+							self.draw_text(self.s_hand_fb, 60, 190, "{}:{:0>2}:{:0>2}".format(hour,minute,second), 63)
+						
 						self.display.blit(self.face_fb, 0, 0)
 						self.display.blit(self.h_hand_fb, 0, 0, 0)
 						self.display.blit(self.m_hand_fb, 0, 0, 0)
@@ -155,8 +160,7 @@ class BlitClock:
 						sleep_ms(1)
 
 			except Exception as e:
-				exceptions['blitclock.clock_handler'] = e
-				info("blitclock.clock_handler: Error: {}".format(e) )
+				error("blitclock.clock_handler: Error: {}".format(e) )
 				
 	def draw_letter(self, frame_buffer, x, y, letter, color, background=0,
 					landscape=False):
