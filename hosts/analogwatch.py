@@ -1,16 +1,14 @@
-# analogclock.py
+# analogwatch.py
 
 from versions import versions
-versions[__name__] = 4
+versions[__name__] = 10
+# 10: refactored version with new Device and hass changes
 
 from machine import SPI, Pin
-from system import config, start
-from profiles import get_profiles
 from logger import info, debug, error
 from gc9a01 import GC9A01
 #from xglcd_font import XglcdFont
 from blitclock import BlitClock
-import asyncio
 
 
 # blank = '{"nws": {"color": 63488, "text": "loading ...            ", "x": 0, "y": 291}, "source": {"color": 63488, "text": "---  ", "x": 0, "y": 15}, "temp": {"color": 38924, "text": "--.-\u0027F  ", "x": 120, "y": 15}}'

@@ -1,8 +1,9 @@
 # blitclock.py
 
 from versions import versions
-versions[__name__] = 5
+versions[__name__] = 10
 # 5: support for gc9a01 driver (round display)
+# 10: refactored version with new Device and hass changes
 
 from time import sleep_ms, ticks_ms
 from machine import RTC
@@ -15,7 +16,6 @@ from localtime import offset_time
 from logger import info, error
 from random import randint
 from device import Device
-from hass import ha_setup
 
 class BlitClock:
 	
@@ -38,7 +38,7 @@ class BlitClock:
 		self.m_hand_fb = FrameBuffer(bytearray(self.width * self.height * 2), self.width, self.height, RGB565 )
 		self.h_hand_fb = FrameBuffer(bytearray(self.width * self.height * 2), self.width, self.height, RGB565 )
 		self.seconds_color = 63488
-		self.onoff = Device(name, state="ON", dtype="switch", notifier_setup=ha_setup)
+		self.onoff = Device(name, state="ON", dtype="switch")
 
 		asyncio.create_task(self.onoff_handler())
 		asyncio.create_task(self.clock_handler())

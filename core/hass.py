@@ -1,9 +1,8 @@
 # hass.py
 
 from versions import versions
-versions[__name__] = 4
-# 2010: fixed state online not publishing
-# 2011: added flag set to track time updates
+versions[__name__] = 10
+# 10: refactored version with Device changes
 
 # import flag
 import asyncio
@@ -16,13 +15,14 @@ from profiles import espMAC
 from system import config, start
 from logger import strftime
 
-from events import wifi_connected, time_synced
+from events import wifi_connected, time_synced, mqtt_connected
+from events import mqtt_error, subscribe_all, device_added
 
 from umqtt.simple import MQTTClient
 import json
 
 from msgqueue import MsgQueue
-from device import Device
+from device import Device, device_list
 from events import config_changed
 
 publish_queue = MsgQueue(50)
@@ -41,80 +41,120 @@ client = MQTTClient(espMAC, config.mqtt_server,
 client.set_last_will('hass/sensor/esp/{}/state'.format(espMAC), 'offline', retain=True)
 
 # wifi_connected = asyncio.Event()
-mqtt_connected = asyncio.Event()
-mqtt_error = asyncio.Event()		# set by pub/sub if error to trigger reconnect
-sub_all = asyncio.Event()
 
+# place for all subscribed topics and related device objects
 subscribed_topics = {}
-
-async def publish_state(device):
-	info("hass: {}: publish_state_handler running".format(device.name) )
-	while True:
-		await device.publish.wait()
-		debug("pubstate: {}, {}, pubflag: {}".format(device.name,device.state, device.publish.is_set() ) )
-		publish_queue.put(gen_topic(device,"/state"), device.state.lower() if device.set_lower else device.state)
-
-		if hasattr(device, 'attr'):
-			publish_queue.put(gen_topic(device,"/attrs"), json.dumps(device.attr) )
-		device.publish.clear()
 
 def gen_topic(device, post=""):
 	return "{}/{}/{}{}".format(config.ha_topic, device.dtype, device.name, post)
 
-# Notifier used to initialize an HA/MQTT device
+async def publish_state(device: Device):
+	info("hass: {}: publish_state_handler running".format(device.name) )
+	while True:
+		await device.needs_publishing.wait()
+
+		debug("hass: pub: {}: {}".format(device.name, device.state) )
+
+		# publish state using name as topic or generated topic
+
+		if "/" in device.name:
+			publish_queue.put(device.name + "/state", device.state.lower() if device.set_lower else device.state)
+		else:
+			publish_queue.put(gen_topic(device,"/state"), device.state.lower() if device.set_lower else device.state)
+			if hasattr(device, 'attr'):
+				publish_queue.put(gen_topic(device,"/attrs"), json.dumps(device.attr) )
+
+		device.needs_publishing.clear()
+
+
 # Create HA entity based on dtype
-# Create an async task to update state if it changes
-# Add to subscribe list if not Read Only
-def ha_setup(device):
-	info("ha_setup: {}".format(device.name))
-	msg = { "name": device.name, '~': gen_topic(device), 'uniq_id': device.name, 'obj_id': device.name, 'stat_t': "~/state",
-			'json_attr_t': "~/attrs", "retain": True }
-	if device.units:
-		msg['unit_of_meas'] = device.units
-	if device.dtype == "switch":
-		msg['cmd_t'] = "~/set"
-	if device.dtype == "cover":
-		msg['cmd_t'] = "~/set"
-	if device.dtype == "light":
-		msg['cmd_t'] = "~/set"
-		msg['bri_cmd_t'] = "~_bri/set"
-		msg['bri_stat_t'] = "~_bri/state"
-		msg['rgb_cmd_t'] = "~_rgb/set"
-		msg['rgb_stat_t'] = "~_rgb/state"
+# Create an async task to update state if publish flag is True
+# Add to subscribe list if subscribe flag is True
+async def device_handler():
+	global subscribed_topics
+	info("hass: device_handler running")
+	while True:
+		await device_added.wait()
+		device_added.clear()
+		info("hass: maintain_devices: new device added")
 
-	publish_queue.put(haconfig_topic.format(device.dtype, device.name ), json.dumps(msg) )
-	asyncio.create_task(publish_state(device))
-	ha_sub(device)
+		for device_name, device in device_list.items():
+			if device.configured:
+				continue
+
+			# Add to subscribe list if True
+			if device.subscribe:
+				if device.dtype == "mqtt":
+					topic = device.name
+				else:
+					topic = gen_topic(device, "/set")
+				
+				# save in dictionary with device object for use in callback
+				subscribed_topics[topic] = device
+
+				# subscribe now
+				subscribe_topic(topic)
+
+			# Create publisher task only if publish is True
+			if device.publish:
+				asyncio.create_task(publish_state(device))
+
+			device.configured = True
+							
+			# remaining steps only if we want to configure device in HA
+
+			info("hass: device setup: {}: {}".format(device.dtype, device.name))
+
+			msg = { "name": device.name, '~': gen_topic(device), 'uniq_id': device.name, 'obj_id': device.name, 'stat_t': "~/state",
+					'json_attr_t': "~/attrs", "retain": True }
+			if device.units:
+				msg['unit_of_meas'] = device.units
+			if device.dtype == "switch":
+				msg['cmd_t'] = "~/set"
+			if device.dtype == "cover":
+				msg['cmd_t'] = "~/set"
+			if device.dtype == "light":
+				msg['cmd_t'] = "~/set"
+				msg['bri_cmd_t'] = "~_bri/set"
+				msg['bri_stat_t'] = "~_bri/state"
+				msg['rgb_cmd_t'] = "~_rgb/set"
+				msg['rgb_stat_t'] = "~_rgb/state"
+
+			publish_queue.put(haconfig_topic.format(device.dtype, device.name ), json.dumps(msg) )
+			
 	
-def ha_sub(device):
-	# add msgqueue to dict for callback handling
-	if not device.ro:
-		subscribed_topics[gen_topic(device,"/set")] = device
-	sub_all.set()
-
-def subscribe_name(device):
-	# add device name for callback handling
-	subscribed_topics[device.name] = device
-
 # Set last will device here
-state = Device('esp/{}'.format(espMAC), "unknown", notifier_setup=ha_setup)
+state = Device('esp/{}'.format(espMAC), "unknown")
+
+def subscribe_topic(topic):
+	try:
+		client.subscribe(topic)
+		info('hass: subscribed: {}'.format(topic) )
+	except:
+		info('hass: subscribe failed: {}'.format(topic) )
+		mqtt_error.set()
 
 # Subscribes and resubs when mqtt connection is lost
-async def sub():  # (re)connection.
-	info("hass: mqtt_subscribe_handler running")
+async def subscribe_all_handler():
+
+	info("hass: subscribe_all_handler running")
+
 	while True:
 		try:
-			await sub_all.wait()
+			await subscribe_all.wait()
+			info("hass: sub_all: resubscribe pending wifi/mqtt reconnect")
 			await wifi_connected.wait()
 			await mqtt_connected.wait()
-			client.subscribe('hass/utc')
+			
+			# should be done as part of the devices
+			# client.subscribe('hass/utc')
+
 			for topic in subscribed_topics:
-				if '/' in topic:
-					info('sub: {}'.format(topic) )
-					client.subscribe(topic)
-					await asyncio.sleep(1)
-			error("sub: All topics resubscribed plus hass/utc")
-			sub_all.clear()
+				subscribe_topic(topic)
+								
+			info("hass: sub_all: resubscribe scheduled all devices")
+			
+			subscribe_all.clear()
 		except asyncio.CancelledError:
 			return
 		except:
@@ -122,9 +162,9 @@ async def sub():  # (re)connection.
 			mqtt_connected.clear()
 			mqtt_error.set()
 
-async def pub():
+async def publish_handler():
 	global publish_queue
-	info("hass: mqtt_publish_handler running")
+	info("hass: publish_handler running")
 	while True:
 		async for pubitem in publish_queue:
 			try:
@@ -143,46 +183,58 @@ async def pub():
 				error('pub: Error topic {}'.format(topic))
 				await asyncio.sleep(1)
 
+utc = Device('hass/utc', "unknown", dtype="mqtt", publish=False)
+
+async def utc_handler():
+	info("hass: utc_handler running")
+	while True:
+		async for _, utc_state in utc.q:
+			try:
+				j = json.loads(utc_state)
+				if 'UTC' in j:
+					RTC().datetime(tuple(int(i) for i in tuple(j['UTC'].split(','))))
+					# flag.set("hour", RTC().datetime()[4])
+					# flag.set("minute", RTC().datetime()[5])
+					# clear watchdog to skip ntp time sync
+					time_synced.set()
+					config.timesync_secs = time.time()
+					debug("UTC: {}".format(j['UTC']) )
+
+					if 'last_restart' not in versions:
+						versions['last_restart'] = strftime()
+						state.needs_publishing.set()
+
+				if "timezone" in j and (config.timezone - 24) != j['timezone']:
+						config.timezone = j['timezone'] + 24
+						debug("TZ: {}".format(config.timezone) )
+				return
+			except:
+				error('handle_utc: Error processing utc: {}'.format(state))
+
 # Callback for MQTTClient
 def cb(topic, msg):
 	#debug('cb: topic: {}'.format(topic))
 	global state
 	td = topic.decode("utf-8")
-	if td == "hass/utc":
-		j = json.loads(msg)
-		if 'UTC' in j:
-			RTC().datetime(tuple(int(i) for i in tuple(j['UTC'].split(','))))
-			# flag.set("hour", RTC().datetime()[4])
-			# flag.set("minute", RTC().datetime()[5])
-			# clear watchdog to skip ntp time sync
-			time_synced.set()
-			config.timesync_secs = time.time()
-			debug("UTC: {}".format(j['UTC']) )
-
-			if 'last_restart' not in versions:
-				versions['last_restart'] = strftime()
-				state.publish.set()
-
-		if "timezone" in j and (config.timezone - 24) != j['timezone']:
-				config.timezone = j['timezone'] + 24
-				info("hass TIMEZONE: {}".format(config.timezone) )
-		return
 
 	if 'esp/{}'.format(espMAC) in td:
 		client.set_last_will('hass/sensor/esp/{}/state'.format(espMAC), 'shutdown', retain=True)
 
 	if td in subscribed_topics:
-		# subscribed_topics holds the topic and device object
+		# get the device object to update it
 		device = subscribed_topics[td]
+		
 		# update device state with new value
 		device.set_state(msg.decode("utf-8"))
+		
 		# put directly in publish_queue to be published on next await
-		device.publish.clear()
-		publish_queue.put(gen_topic(device,"/state"), device.state.lower() if device.set_lower else device.state)
+		if device.publish:
+			device.needs_publishing.clear()
+			publish_queue.put(gen_topic(device,"/state"), device.state.lower() if device.set_lower else device.state)
 
 # ping mqtt every 30 seconds
-async def ping():
-	info("hass: mqtt_ping running")
+async def ping_handler():
+	info("hass: ping_handler running")
 	while True:
 		try:
 			await mqtt_connected.wait()
@@ -195,8 +247,8 @@ async def ping():
 			mqtt_error.set()
 
 # Check for incoming MQTT messages (calls callback if received)
-async def check():
-	info("hass: mqtt_check_msg running")
+async def check_msg_handler():
+	info("hass: check_msg_handler running")
 	while True:
 		try:
 			await mqtt_connected.wait()
@@ -210,7 +262,7 @@ async def check():
 
 # Maintain MQTTclient connection, reconnect if flagged as bad
 # TODO: "test" if server is available using sockets
-async def mqtt():
+async def mqtt_connection_handler():
 	global state
 	info("hass: mqtt_connection_handler running")
 	client.set_callback(cb)
@@ -252,9 +304,9 @@ async def mqtt():
 			client.ping()
 			mqtt_connected.set()
 			mqtt_error.clear()
-			sub_all.set()
+			subscribe_all.set()
 			state.set_state('online')
-			state.publish.set()
+			state.needs_publishing.set()
 			info("mqtt: connected: {}".format(config.mqtt_server) )
 			await mqtt_error.wait()
 		except asyncio.CancelledError:
@@ -288,11 +340,13 @@ async def mqtt():
 # 				continue
 # 		await asyncio.sleep(70)
 
-start(mqtt)
-start(ping)
-start(check)
-start(pub)
-start(sub)
+start(mqtt_connection_handler)
+start(ping_handler)
+start(check_msg_handler)
+start(publish_handler)
+start(subscribe_all_handler)
+start(utc_handler)
+start(device_handler)
 
-info("hass: core tasks created ..." )
+info("hass: setup complete" )
 

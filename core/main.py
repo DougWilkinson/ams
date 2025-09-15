@@ -1,17 +1,18 @@
 # main.py
 
+from time import sleep, time
+boot_start_seconds = time()
+
 from versions import versions
-versions[__name__[2:-2]] = 3
+versions[__name__[2:-2]] = 10
+# 10: started new repo and refactored
 
 import webrepl
 
 # reboot not used here, but used in webrepl, leave it!
-from system import config, espMAC, reboot
+from system import config, espMAC, reboot, sb
 
 from logger import info, error
-
-import asyncio
-from time import sleep
 
 import wifi
 
@@ -26,6 +27,8 @@ if espMAC != config.hostname:
 	info("main: loading module: {}".format(config.hostname) )
 	__import__(config.hostname)
 
+info("main: host module loaded in {} seconds".format(time() - boot_start_seconds) )	
+
 for k, v in config.persistent.items():
 	if "module_" in k and v:
 		name = k.split("_")[1]
@@ -39,8 +42,9 @@ for k, v in config.persistent.items():
 
 from webconfig import app
 
-if espMAC == config.hostname:
-	import hass
+# hass should be loaded after all other modules
+# device_list has to be populated before hass
+import hass
 
 # 2 = safeboot, do not start named module
 # 3 = delay start to allow remote console time
@@ -62,10 +66,10 @@ if config.boot_mode == 0:
 # all other restarts are done through reboot() function
 config.boot_mode = 0
 
-info("main: starting apps")
 
 def run(host="0.0.0.0", port=80, debug=True):
 	try:
+		info("main: starting app")
 		app.run(host=host, port=port, debug=debug)
 	except KeyboardInterrupt:
 		app.shutdown()
@@ -73,5 +77,7 @@ def run(host="0.0.0.0", port=80, debug=True):
 	except Exception as e:
 		error("main: fatal error: {}".format(e) )
 		app.shutdown()
+
+info("main: all modules loaded in {} seconds".format(time() - boot_start_seconds) )	
 
 run()
