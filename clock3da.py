@@ -1,10 +1,11 @@
-
+# clock3da.py
 
 from versions import versions
-versions[__name__] = 5
+versions[__name__] = 11
 # 5: compatible with PC version and includes async scrolling
+# 10: refactored version with new Device and hass changes
+# 11: speed set to 0 where noted
 
-from hass import ha_setup
 clock_color = 1
 # Leave above when transfering from PC version
 
@@ -143,7 +144,7 @@ class Clock3D:
 		for i in range(8):
 			self.buffer.append(Digits([self.last_time[i]], scale=self.scale, xo=i-3, yo=0 ) )
 		
-		self.onoff = Device(name, state="ON", dtype="switch", notifier_setup=ha_setup)
+		self.onoff = Device(name, state="ON", dtype="switch")
 
 		# asyncio.create_task(self.onoff_handler())
 		# asyncio.create_task(self.update_display())
@@ -251,7 +252,8 @@ class Clock3D:
 					always_do = asyncio.Event()
 					always_do.set()
 
-					asyncio.create_task(self.flip_digit(self.buffer[7], [current_time[7]], 0.001 , always_do, always_do ) )
+					# speed set to 0 for version 11
+					asyncio.create_task(self.flip_digit(self.buffer[7], [current_time[7]], 0 , always_do, always_do ) )
 					
 					wait_for_next = asyncio.Event()
 
@@ -262,14 +264,15 @@ class Clock3D:
 								continue
 							# if current_time[i] != self.last_time[i]:
 							finished_event = asyncio.Event()
-							asyncio.create_task(self.flip_digit(self.buffer[i], [current_time[i]], 0.006 , finished_event, wait_for_next ) )
+							asyncio.create_task(self.flip_digit(self.buffer[i], [current_time[i]], 0.01 , finished_event, wait_for_next ) )
 							wait_for_next = finished_event
 						finished_event.set()
 					self.last_time = current_time
 				
 				self.display.show()
 				
-				await asyncio.sleep(.001)
+				# speed set to 0 for version 11
+				await asyncio.sleep(0)
 		except Exception as e:
 			config.last_exception = 'clock3da.update_display: ' + e
 			print("clock3da.update_display error: {}".format(e) )

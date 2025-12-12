@@ -1,12 +1,12 @@
 # vl53l0x.py
 
 from versions import versions
-versions[__name__] = 1
-# added wait_max function
+versions[__name__] = 12
+# 10: conforms to new standard
+# 11: timeout does not use asyncio sleep
+# 12: added poll_ms and poll_count, added in_range() check
 
-from core import info, started
-from device import Device
-from hass import ha_setup
+from logger import info
 import asyncio
 
 from micropython import const
@@ -119,12 +119,14 @@ class TimeoutError(RuntimeError):
 
 
 class VL53L0X:
-	def __init__(self, name, i2c, min=75, max=125, address=0x29):
+	def __init__(self, name, i2c, min=1, max=75, poll_seconds=0.01, address=0x29):
 		self.i2c = i2c
 		self.name = name
 		#self.sensor = Device(name, "0", "mm", notifier_setup=ha_setup)
 
 		self.address = address
+		self.poll_seconds = poll_seconds
+
 		self.init()
 		self._started = False
 		self.measurement_timing_budget_us = 0
@@ -155,8 +157,23 @@ class VL53L0X:
 		self.min = min
 		self.max = max
 
+	# Check if distance is in range (to get initial state)
+	def in_range(self):
+		count_in_range = 0
+		for i in range(5):
+			dist = self.read()
+			if dist > self.min and dist < self.max:
+				count_in_range += 1
+			time.sleep(.01)
+		
+		if count_in_range > 2:
+			return True
+		else:
+			return False
+
+
 	# wait for values to be in_range or not, count consecutive values, timeout in msec to return if never in/out of range
-	async def wait_for(self, in_range=True, count=11, timeout=None):
+	async def wait_for(self, in_range=True, count=11, timeout_ms=None):
 
 		if in_range:
 			min = self.min
@@ -171,124 +188,32 @@ class VL53L0X:
 		while range_count < count:
 			dist = self.read()
 			
-			if dist > min and dist < max:
-				range_count += 1
-			else:
-				range_count = 0
+			if in_range:
+				if dist > self.min and dist < self.max:
+					range_count += 1
+				else:
+					range_count = 0
 
-			if timeout and time.ticks_ms() - start_ticks > timeout:
+			else:
+				if dist > self.min and dist < self.max:
+					range_count = 0
+				else:
+					range_count += 1
+
+			if timeout_ms and time.ticks_ms() - start_ticks > timeout_ms:
 				info("timed out, dist = {}".format(dist))
 				return
 
-			await asyncio.sleep(.01)
+			if timeout_ms:
+				time.sleep(self.poll_seconds)
+			else:
+				await asyncio.sleep(self.poll_seconds)
 
-			if not range_count:
-				time.sleep_us(5000)
+			# if not range_count:
+			# 	time.sleep_us(5000)
 
 		info("range count reached, dist = {}".format(dist))
 
-	# async def wait_trigger(self,debug=False):
-	# 	in_range_count = 0
-
-	# 	while in_range_count < 11:
-	# 		dist = self.read()
-			
-	# 		if dist > self.min and dist < self.max:
-	# 			in_range_count += 1
-	# 			if debug:
-	# 				info("dist = {}".format(dist))
-	# 		else:
-	# 			in_range_count = 0
-	# 			if debug:
-	# 				info("dist = {}".format(dist))
-	# 		await asyncio.sleep(.01)
-	# 		if not in_range_count:
-	# 			time.sleep_us(5000)
-
-	# 	info("dist = {}".format(dist))
-
-	# async def wait_max_time(self, max_ms=2000, debug=False):
-	# 	out_range_count = 0
-	# 	start_ticks = time.ticks_ms()
-
-	# 	while out_range_count < 3 and time.ticks_ms() - start_ticks < max_ms:
-	# 		dist = self.read()
-			
-	# 		if dist > self.min and dist < self.max:
-	# 			out_range_count = 0
-	# 			if debug:
-	# 				info("dist = {}".format(dist))
-	# 		else:
-	# 			out_range_count += 1
-	# 			if debug:
-	# 				info("dist = {}".format(dist))
-	# 		await asyncio.sleep(.01)
-
-	# 	info("dist = {}".format(dist))
-
-	# async def wait_clear(self, debug=False):
-	# 	out_range_count = 0
-
-	# 	while out_range_count < 11:
-	# 		dist = self.read()
-			
-	# 		if dist > self.min and dist < self.max:
-	# 			out_range_count = 0
-	# 			if debug:
-	# 				info("dist = {}".format(dist))
-	# 		else:
-	# 			out_range_count += 1
-	# 			if debug:
-	# 				info("dist = {}".format(dist))
-	# 		await asyncio.sleep(.01)
-
-	# 	info("dist = {}".format(dist))
-
-
-	# async def update(self):
-	# 	started("vl53l0x_update")
-	# 	every_five = 0
-	# 	while True:
-
-	# 		try:
-	# 			raw = self.read()
-				
-	# 			if raw >= self.min and raw < self.max:
-
-	# 				self.values.append(raw)
-	# 				self.values.pop(0)
-	# 				stable = True
-
-	# 				# Check if all values are close to the current reading
-	# 				# If not, keep measuring
-
-	# 				for v in self.values[:-1]:
-	# 					if abs(v-raw) > 150:
-	# 						stable = False
-	# 						break
-
-	# 				# if we have a stable reading, update the device if change is larger than min diff
-
-	# 				if stable:
-	# 					current_average = round( sum(self.values)/ len(self.values), 1 )
-	# 					if abs(current_average - self.last_average) > self.diff:
-	# 						self.last_average = current_average
-	# 						info("{}: values: {}".format(self.name, self.values) )
-	# 						self.sensor.set_state(current_average)
-
-	# 		except TimeoutError:
-	# 			info("vl53l0x: update: Timeout Error")
-
-	# 		except Exception as e:
-	# 			info("vl53l0x: update: {}".format(e))
-
-	# 		if every_five > 4:
-	# 			info("{}: {}".format(self.last_average, self.values) )
-	# 			every_five = 0
-			
-	# 		every_five += 1
-
-	# 		await asyncio.sleep_ms(200)
 
 	def _registers(self, register, values=None, struct_type='B'):
 		if values is None:

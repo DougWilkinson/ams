@@ -1,12 +1,14 @@
 # profiles.py
 
 from versions import versions
-versions[__name__] = 1
+versions[__name__] = 11
 # 1: split from settings file
+# 10: refactored
+# 11: changed load/save for profiles
 
 from device import Device
 import json
-from os import listdir, remove
+from os import listdir, remove, rename, stat
 from machine import RTC, unique_id
 from binascii import hexlify
 
@@ -32,13 +34,14 @@ rtc=RTC()
 # set hostname to MAC if not overridden from flash or RTCmem
 factory_defaults['hostname'] = espMAC
 
+# Look in flash for any files starting with sensor.profile
 def get_profiles() -> list:
 	try:
 		return [ f.split(".")[2] for f in listdir() if f.startswith("sensor.profile.") ]
 	except:
 		return ['Error reading']
 
-def delete_profile_by_name(profile_name) -> bool:
+def delete_profile(profile_name) -> bool:
 
 	try:
 		remove("sensor.profile.{}".format(profile_name) )
@@ -49,12 +52,46 @@ def delete_profile_by_name(profile_name) -> bool:
 		error(e)
 		return False
 
+# restores to profile name, reboot required after to use new profile
+def restore_profile(name) -> bool:
+	
+	# check for default selected
+	if name == espMAC:
+		error("restore_profile: cannot restore default profile" ) 
+		return True
+	
+	if name == "last_good":
+
+		try:
+			remove("sensor.profile.{}".format(espMAC))
+			rename("sensor.profile.last_good", "sensor.profile.{}".format(espMAC) )
+			info("restore_profile: restored from: last_good" )
+			return True
+		except:
+			error("restore_profile: failed to restore from: last_good" )
+			return False
+	
+	try:
+		remove("sensor.profile.last_good")
+	except:
+		pass
+
+	try:
+		rename("sensor.profile.{}".format(espMAC), "sensor.profile.last_good" )
+		rename("sensor.profile.{}".format(name), "sensor.profile.{}".format(espMAC) )
+		info("restore_profile: restored from: {}".format(name) )
+		return True
+	except Exception as e:
+		error("restore_profile: failed to restore from: {}".format(name) )
+		return False
+	
 class Profile:
 
 	masked_values = ['mqtt_username', 'mqtt_password', 'wifi_secret', 'password']
 
 	exceptions = ('saved', 'nonpersistent', 'persistent', 'modules')
 
+	# mask secrets
 	def mask(unmasked) -> str:
 		
 		#print(unmasked)
@@ -83,17 +120,38 @@ class Profile:
 
 		# merge from saved flash file
 		if self.saved.raw_state and self.saved.raw_state != "{}":
-			print("merging from flash", self.saved.raw_state)
+			info("profile: merging from: {}".format(self.saved.name))
 			self.merge_persistent( json.loads(self.saved.raw_state) )
 			result = "Profile loaded from flash:"
+		
 
 		# merge from RTC (only if default)
-		if name == espMAC:
-			result = self.load_from_rtc(result)
-			if self.saved.state == "{}":
-				print("no settings found in flash or RTC, saving factory defaults to default profile")
-				self.saved_from_profile = espMAC
-				self.save()
+		result = self.load_from_rtc(result)
+		
+		# if no settings found, try looking for mysecrets
+		if self.saved.state == "{}":
+			
+			try:
+				with open(espMAC) as f:
+					t = f.readline()
+					macfile_hostname = json.loads(t)['run']
+					info("profiles: loaded hostname from macfile: {}".format(macfile_hostname) )
+			except:
+				error("profiles: failed to load hostname from macfile, using espMAC")
+				macfile_hostname = espMAC
+
+			try:
+				import mysecrets
+				self.merge_persistent({"hostname": macfile_hostname, "password": mysecrets.webrepl_pass, "mqtt_server": mysecrets.mqtt_server,
+					"mqtt_username": mysecrets.mqtt_user, "mqtt_password": mysecrets.mqtt_pass,
+					"wifi_ssid": mysecrets.wifi_name, "wifi_secret": mysecrets.wifi_pass,
+					"mqtt_ssl": False })
+				info("settings loaded from mysecrets")
+			except:
+				error("no settings found, saving factory defaults to default profile")
+
+			self.saved_from_profile = espMAC
+			self.save()
 		
 		#print(result)
 
@@ -145,36 +203,31 @@ class Profile:
 			self.save_to_rtc()
 
 		if self.saved.save_now():
-			print("save: profile saved as {}".format(self.profile) )
+			info("profile: save: profile: {}".format(self.profile) )
 		else:
-			print("save: failed to save profile: {}".format(self.profile) )
+			error("profile: save: failed: {}".format(self.profile) )
 
+	# save current state with new name
 	def save_as(self, name):
 		if name == espMAC or name == "":
-			print("save_as: invalid profile name!")
+			error("profile: save_as: invalid profile name: {}".format(name) )
 			return
-		new_profile = Device("profile." + name, "" )
-		new_profile.profile = name
-		new_profile.save_now()
-		self.profile = name
-		self.save()
 
+		try:
+			with open("sensor.profile.{}".format(name), "w") as f:
+				f.write(self.saved.raw_state)
+				info("save_profile: saved: {}".format(name) )
+				return True
+		except Exception as e:
+			info("save_profile: failed to save: {}".format(name) )
+			return False
+	
 	def save_to_rtc(self):
 		# only save to RTC if default
 		if self.profile != espMAC:
 			return
 		rtc_data = json.dumps({"persistent": self.persistent, "nonpersistent": self.nonpersistent} )
 		rtc.memory(rtc_data)
-
-	def return_to_factory_defaults(self):
-
-		self.nonpersistent = factory_defaults
-		self.save_to_rtc()
-
-		self.persistent = factory_defaults
-		self.save()
-		
-		print("settings returned to factory defaults")
 
 	def set_value(self, name, value):
 		
@@ -232,67 +285,3 @@ class Profile:
 	def __dir__(self):
 		return list(set(self.persistent.keys() + self.nonpersistent.keys() ) )
 	
-	# update persistent settings from mqtt
-	# Send k/v pairs with = sign to update settings
-	# key=value
-	#
-	# other commands:
-	# save <profile_name> - save current settings as new profile before changing default
-	# factory reset - reset to defaults
-	# profile <profile_name> - change default to profile named profile_name
-	# delete <profile_name> - delete profile
-
-	# async def update(self):
-	# 	async for _ , ev in self.saved.q:
-			
-	# 		try:
-	# 			if "=" in ev:
-	# 				k, v = ev.split("=")
-	# 				if k in self.persistent:
-	# 					self.__setattr__(k, v)
-	# 				continue
-
-	# 			k, v = ev.split(" ")
-
-	# 			if k == 'save':
-	# 				self.set_default(v)
-	# 				continue
-
-	# 			# if k == 'factory':
-
-	# 			# new_profile = Device(self.profile + "." + changes['name'], "", save_state=True, mask=mask_values)
-
-	# 			# new_profile.set_state(ev)
-	# 			# new_profile.save_now()
-
-	# 		except:
-	# 			error("settings: update: {}".format(ev) )
-		
-	def set_as_default(self, name) -> bool:
-		if self.profile != espMAC:
-			info("set_default: this is not the default profile!")
-			return True
-		
-		try:
-			# load profile to use
-			new_profile = Device("profile." + name, "{}", save_state=True, mask=Profile.mask)
-			
-			# if profile exists, use it
-			if new_profile.state != "{}":
-				
-				new_persistent = json.loads(new_profile.raw_state)
-				new_persistent['profile'] = espMAC
-				new_persistent['saved_from_profile'] = name
-				self.merge_persistent(new_persistent)
-				self.save()
-
-				# signal config change to other modules
-				config_changed.set()
-			else:
-				info("set_default: profile not found: sensor.pofile." + name)
-				return False
-		except Exception as e:
-			info("set_default: Error setting default to: sensor.profile." + name)
-			info("Exception: ",e)
-			return False
-

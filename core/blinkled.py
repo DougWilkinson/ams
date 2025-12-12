@@ -1,5 +1,9 @@
 #blinkled.py
 
+from versions import versions
+versions[__name__] = 10
+# 10: works with refactored code
+
 from machine import Pin, reset
 import asyncio
 from time import sleep
@@ -45,6 +49,11 @@ async def wifi_status(wlan):
 	# 200 is wifi not connected
 	status = 200
 
+	# read to clear buffer
+	_, check_key = key_press.poll(0)[0]
+	if check_key & 1:
+		key_value = stdin.read(1)
+
 	while True:
 		off_led.write()
 		await asyncio.sleep_ms(status)
@@ -57,4 +66,4 @@ async def wifi_status(wlan):
 
 		if check_key & 1:
 			key_value = stdin.read(1)
-			print("key:", key_value)
+			print("keypressed:", ord(key_value))

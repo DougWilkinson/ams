@@ -2,19 +2,22 @@
 # super mini s3 and sh1106 in office cube
 
 from versions import versions
-versions[__name__] = 1
+versions[__name__] = 13
+# 10: converted to new standard for device and hass
+# 11: added on/off handling back in
+# 12: updated to use restore_profile
+# 13: adjusted bottom row y pos start 47 vs 56 ?
 
 from machine import Pin, SoftI2C
 import asyncio
 import time
 
-from hass import subscribe_name
 from system import config, start
-from profiles import get_profiles
+from profiles import get_profiles, restore_profile
 from logger import info, debug, error
 from touchpin import TouchPin
 from sh1106 import SH1106_I2C
-from clock3da import Clock3D
+from clock3dblit import Clock
 
 from device import Device
 from menu import Menu
@@ -29,13 +32,12 @@ sh_display = SH1106_I2C(128, 64, sh1106_i2c )
 
 # sh_clock = BlitClock("sh1106", width=64, height=64, display=sh_display, bitmap=MONO_VLSB, hand=2)
 
-sh_clock = Clock3D("cubeclock", display=sh_display, scale=0.44)
+# sh_clock = Clock3D("cubeclock", display=sh_display, scale=0.44)
+sh_clock = Clock("cubeclock", sh_display)
 
-forecast = Device("hass/weather/forecast", "" )
-subscribe_name(forecast)
+forecast = Device("hass/weather/forecast", "", publish=False, dtype="mqtt" )
 
-temperature = Device("hass/weather/temperature", "" )
-subscribe_name(temperature)
+temperature = Device("hass/weather/temperature", "", publish=False, dtype="mqtt" )
 
 next_button = TouchPin("up_button", pin=6, on_value=19500, off_value=18500)
 select_button = TouchPin("down_button", pin=7, on_value=18000, off_value=16000)	
@@ -51,7 +53,7 @@ def set_hour_style(hour_style):
 def set_clock_style(clock_style):
 	pass
 
-function_index = { "profiles": config.set_as_default, "12/24": set_hour_style, "style": set_clock_style }
+function_index = { "profiles": restore_profile, "12/24": set_hour_style, "style": set_clock_style }
 
 menu = Menu(clock_menu)
 
@@ -62,7 +64,7 @@ def clear_menu_display(show=True):
 	sh_display.fill_rect(0, 0, 128, 8, 0)
 
 	# clear bottom row
-	sh_display.fill_rect(0, 56, 128, 64, 0)
+	sh_display.fill_rect(0, 47, 128, 55, 0)
 
 	if show:
 		sh_display.show()
@@ -74,7 +76,7 @@ async def update_weather():
 			if menu.active:
 				continue
 			clear_menu_display(show=False)
-			sh_display.text(forecast.state, 0, 56)
+			sh_display.text(forecast.state, 0, 47)
 			sh_display.text(temperature.state, 128 - (8 * len(temperature.state) ), 0)
 			sh_display.show()
 
@@ -97,12 +99,12 @@ async def show_clock_menu():
 
 			# display text for select/set button on bottom row
 			if menu.row == 0:
-				sh_display.text("select", 0, 56)
+				sh_display.text("select", 0, 47)
 			else:
-				sh_display.text("set", 0, 56)
+				sh_display.text("set", 0, 47)
 		else:
 			# show date, weather and temperature
-			sh_display.text(forecast.state, 0, 56)
+			sh_display.text(forecast.state, 0, 47)
 			sh_display.text(temperature.state, 128 - (8 * len(temperature.state) ), 0)
 
 		sh_display.show()

@@ -1,7 +1,8 @@
 # localtime.py
 
 from versions import versions
-versions[__name__] = 1
+versions[__name__] = 10
+# 10: converted to new device and hass
 
 import time
 

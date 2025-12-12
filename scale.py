@@ -1,14 +1,13 @@
 # scale.py
 
 from versions import versions
-versions[__name__] = 3
-# 209: added periodic publish and self.scale
+versions[__name__] = 5
+# 5: new standard for device and hass
 
 import asyncio
-from hass import ha_setup
 from device import Device
 from time import time
-from core import info
+from logger import info, error
 
 # hardware is initialized (set pins, etc)
 #hx=HX711(hxclock_pin=12, hxdata_pin=14, k=386)
@@ -17,7 +16,7 @@ from core import info
 
 class Scale():
 	def __init__(self, name, hx, diff) -> None:
-		self.scale = Device(name, "0", "hx", notifier_setup=ha_setup, publish=False)
+		self.scale = Device(name, "0", "hx", )
 		asyncio.create_task(self.update(hx, diff))	
 	
 	async def update(self, hx, diff):

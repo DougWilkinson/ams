@@ -1,7 +1,9 @@
 # wifi.py
 
 from versions import versions
-versions[__name__] = 1
+versions[__name__] = 11
+# 10: refactored
+# 11: added global versions to fix info not being added
 
 from network import WLAN, STA_IF, AP_IF, STAT_NO_AP_FOUND, STAT_WRONG_PASSWORD, STAT_GOT_IP, STAT_CONNECTING
 from time import sleep, sleep_ms, ticks_ms
@@ -72,6 +74,7 @@ def suspect_wifi_config() -> bool:
 	return False
 
 async def wifi():
+	global versions
 	global wlan
 	global config
 	global wifi_connected
@@ -195,7 +198,7 @@ async def ap_wifi_handler():
 		
 		await asyncio.sleep(5)
 
-start(ap_wifi_handler)
+#start(ap_wifi_handler)
 
 # start dns server for captive portal and wait for client wifi to connect
 # dns needs AP mode enabled, so this can't start until ap_mode is enabled

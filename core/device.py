@@ -61,13 +61,11 @@ class Device:
 		self.units = units
 		self.q = MsgQueue(1)
 		self.event = asyncio.Event()
-		self.publish = asyncio.Event()
-		if publish:
-			self.publish.set()
 		self.set_lower = set_lower
 
 		self.configured = configured
 		self.subscribe = subscribe
+		self.publish = publish
 		self.needs_publishing = asyncio.Event()
 		if needs_publishing:
 			self.needs_publishing.set()
@@ -91,7 +89,7 @@ class Device:
 		if self.raw_state != str(state):
 			self.raw_state = str(state)
 			self.state = self.mask(str(state))
-			self.publish.set()
+			self.needs_publishing.set()
 			self.trigger_save.set()
 
 	# delay save to avoid overloading real time response for some devices

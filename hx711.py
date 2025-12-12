@@ -1,18 +1,15 @@
 # hx711.py
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 5
 
-# async average updates
-# comment using gain = 128 as default
-# remove native decorator to allow compilation
-
-from core import started
-from time import sleep_ms, sleep_us
+from time import sleep_ms
 from machine import Pin
 import asyncio
-from natives import toggle
-from machine import enable_irq, disable_irq
+
+def toggle(p):
+	p.value(1)
+	p.value(0)
 
 class HX711():
 	
@@ -62,7 +59,6 @@ class HX711():
 
 	# Update samples and low/high flags
 	async def update(self):
-		started("hx_update")
 		while True:
 			# while not self.dataPin.value():
 			# 	print(self.dataPin.value())

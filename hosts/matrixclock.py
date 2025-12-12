@@ -1,18 +1,19 @@
 # matrixclock.py
 
 from versions import versions
-versions[__name__] = 3
-# 2,1,0: converted from modsensor
+versions[__name__] = 10
+# 10: converted to new device, profile and hass
 
 # text displayed based on values, not when sent from mqtt
 from time import time, ticks_diff, ticks_ms, sleep_ms
-from core import debug, info, error, offset_time
-from flag import get
+from logger import debug, info, error
+from localtime import offset_time
+from events import time_synced
 from random import getrandbits
 from device import Device
 from machine import Pin
 from neopixel import NeoPixel
-from hass import ha_setup
+from system import config
 import asyncio
 
 #fakeimport matrix_font
@@ -33,7 +34,7 @@ def burst(leds, empty=6):
 
 class MatrixClock:
 	
-	def __init__(self, name, clock_color=(0,1,1), 
+	def __init__(self, clock_color=(0,1,1), 
 			  text_color=(0,0,1), pin=13, num_leds=255,
 			  fade=120):
 		self.leds = NeoPixel(Pin(pin), num_leds)
@@ -42,8 +43,8 @@ class MatrixClock:
 		self.warn_color = (1,0,0)
 		self.text_color = text_color
 		self.fade = fade
-		self.text = Device(name + "_text", state='', notifier_setup=ha_setup)
-		self.onoff = Device(name, state="ON", dtype="switch", notifier_setup=ha_setup)
+		self.text = Device(config.hostname + "_text", state='')
+		self.onoff = Device(config.hostname, state="ON", dtype="switch")
 		self.map = map
 		self.width = width
 		self.time_buffer = [32,32,32,32,32]
@@ -77,7 +78,7 @@ class MatrixClock:
 	async def display_handler(self):
 		while True:
 			if self.show_display:
-				if not get("timesynced"):
+				if not time_synced.is_set():
 					self.display_clock(self.warn_color)
 					await asyncio.sleep_ms(2000)
 					continue
@@ -91,7 +92,7 @@ class MatrixClock:
 					self.display_clock(self.clock_color)
 			await asyncio.sleep_ms(500)
 
-		if second >= 54 or not get("timesynced"):
+		if second >= 54 or not time_synced.is_set():
 			debug("ledmatrix:clock: 5 sec warn")
 			color = self.warn_color
 		else:

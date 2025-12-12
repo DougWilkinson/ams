@@ -1,9 +1,12 @@
 # hass.py
 
 from versions import versions
-versions[__name__] = 10
+versions[__name__] = 14
 # 10: refactored version with Device changes
-
+# 11: fixed attrs and versions to set last_restart immediately
+# 12: moved timezone update for config and localtime to utc handler
+# 13: added await_subscribe to wait for wifi and mqtt to connect
+# 14: fixed missing binary_sensor in check for HA config
 # import flag
 import asyncio
 import time
@@ -14,6 +17,7 @@ from logger import info, error, debug
 from profiles import espMAC
 from system import config, start
 from logger import strftime
+from localtime import offset_time
 
 from events import wifi_connected, time_synced, mqtt_connected
 from events import mqtt_error, subscribe_all, device_added
@@ -53,16 +57,19 @@ async def publish_state(device: Device):
 	while True:
 		await device.needs_publishing.wait()
 
-		debug("hass: pub: {}: {}".format(device.name, device.state) )
+		debug("pubstate: device: {} state: {}".format(device.name, device.state) )
 
-		# publish state using name as topic or generated topic
+		# publish state using name only as topic (if "mqtt") or generated HA topic (all others)
 
-		if "/" in device.name:
-			publish_queue.put(device.name + "/state", device.state.lower() if device.set_lower else device.state)
+		if device.dtype == "mqtt":
+			pub_topic = device.name
 		else:
-			publish_queue.put(gen_topic(device,"/state"), device.state.lower() if device.set_lower else device.state)
-			if hasattr(device, 'attr'):
-				publish_queue.put(gen_topic(device,"/attrs"), json.dumps(device.attr) )
+			pub_topic = gen_topic(device)
+
+		publish_queue.put(pub_topic + "/state", device.state.lower() if device.set_lower else device.state)
+
+		if hasattr(device, 'attrs'):
+			publish_queue.put(pub_topic + "/attrs", json.dumps(device.attrs) )
 
 		device.needs_publishing.clear()
 
@@ -93,7 +100,7 @@ async def device_handler():
 				subscribed_topics[topic] = device
 
 				# subscribe now
-				subscribe_topic(topic)
+				asyncio.create_task(await_subscribe(topic) )
 
 			# Create publisher task only if publish is True
 			if device.publish:
@@ -103,16 +110,23 @@ async def device_handler():
 							
 			# remaining steps only if we want to configure device in HA
 
+			if device.dtype not in "binary_sensor|sensor|switch|cover|light":
+				continue
+			
 			info("hass: device setup: {}: {}".format(device.dtype, device.name))
 
 			msg = { "name": device.name, '~': gen_topic(device), 'uniq_id': device.name, 'obj_id': device.name, 'stat_t': "~/state",
 					'json_attr_t': "~/attrs", "retain": True }
+			
 			if device.units:
 				msg['unit_of_meas'] = device.units
+			
 			if device.dtype == "switch":
 				msg['cmd_t'] = "~/set"
+			
 			if device.dtype == "cover":
 				msg['cmd_t'] = "~/set"
+			
 			if device.dtype == "light":
 				msg['cmd_t'] = "~/set"
 				msg['bri_cmd_t'] = "~_bri/set"
@@ -124,14 +138,21 @@ async def device_handler():
 			
 	
 # Set last will device here
-state = Device('esp/{}'.format(espMAC), "unknown")
+versions['last_restart'] = strftime()
+state = Device('esp/{}'.format(espMAC), "unknown", needs_publishing=True)
+state.attrs = versions
 
+async def await_subscribe(topic):
+	await wifi_connected.wait()
+	await mqtt_connected.wait()
+	subscribe_topic(topic)
+								
 def subscribe_topic(topic):
 	try:
 		client.subscribe(topic)
 		info('hass: subscribed: {}'.format(topic) )
 	except:
-		info('hass: subscribe failed: {}'.format(topic) )
+		error('hass: subscribe failed: {}'.format(topic) )
 		mqtt_error.set()
 
 # Subscribes and resubs when mqtt connection is lost
@@ -155,9 +176,8 @@ async def subscribe_all_handler():
 			info("hass: sub_all: resubscribe scheduled all devices")
 			
 			subscribe_all.clear()
-		except asyncio.CancelledError:
-			return
-		except:
+		except Exception as e:
+			error("hass: ping: {}".format(e) )
 			# Signal mqtt reconnect
 			mqtt_connected.clear()
 			mqtt_error.set()
@@ -173,11 +193,10 @@ async def publish_handler():
 				await wifi_connected.wait()
 				await mqtt_connected.wait()
 				client.publish(topic, msg, retain=True)
-			except asyncio.CancelledError:
-				return
 			except ValueError:
 				error('pub: ValueError unpacking {}'.format(pubitem))
-			except:
+			except Exception as e:
+				error("hass: publish: {}".format(e) )
 				mqtt_connected.clear()
 				mqtt_error.set()
 				error('pub: Error topic {}'.format(topic))
@@ -200,14 +219,12 @@ async def utc_handler():
 					config.timesync_secs = time.time()
 					debug("UTC: {}".format(j['UTC']) )
 
-					if 'last_restart' not in versions:
-						versions['last_restart'] = strftime()
-						state.needs_publishing.set()
-
 				if "timezone" in j and (config.timezone - 24) != j['timezone']:
 						config.timezone = j['timezone'] + 24
-						debug("TZ: {}".format(config.timezone) )
-				return
+						offset_time(config.timezone)
+						config_changed.set()
+						config.save()
+						debug("timezone updated: {}".format(config.timezone) )
 			except:
 				error('handle_utc: Error processing utc: {}'.format(state))
 
@@ -240,9 +257,8 @@ async def ping_handler():
 			await mqtt_connected.wait()
 			client.ping()
 			await asyncio.sleep(30)
-		except asyncio.CancelledError:
-			return
-		except OSError:
+		except Exception as e:
+			error("hass: ping: {}".format(e) )
 			mqtt_connected.clear()
 			mqtt_error.set()
 
@@ -254,9 +270,8 @@ async def check_msg_handler():
 			await mqtt_connected.wait()
 			client.check_msg()
 			await asyncio.sleep(0)
-		except asyncio.CancelledError:
-			return
-		except OSError:
+		except Exception as e:
+			error("hass: check_msg: {}".format(e) )
 			mqtt_connected.clear()
 			mqtt_error.set()
 
@@ -298,8 +313,7 @@ async def mqtt_connection_handler():
 			info("hass: mqtt_ssl: {}".format(config.mqtt_ssl) )
 
 			await wifi_connected.wait()
-			#state.attr = { "hostname": hostname, "versions": versions, "mac": espMAC, "ipv4": list(wlan.ifconfig())[0]}
-			state.attr = versions
+			state.attrs = versions
 			client.connect(clean_session=True)
 			client.ping()
 			mqtt_connected.set()
@@ -309,9 +323,8 @@ async def mqtt_connection_handler():
 			state.needs_publishing.set()
 			info("mqtt: connected: {}".format(config.mqtt_server) )
 			await mqtt_error.wait()
-		except asyncio.CancelledError:
-			return
-		except OSError:
+		except Exception as e:
+			error("hass: mqtt_connect_handler: {}".format(e) )
 			error("mqtt: connect OSError")
 			await asyncio.sleep(2)
 

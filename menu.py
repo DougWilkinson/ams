@@ -1,5 +1,9 @@
 # menu.py
 
+from versions import versions
+versions[__name__] = 10
+# 10: converted to new standard for device and hass
+
 import asyncio
 from logger import info, error, debug
 import time

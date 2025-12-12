@@ -1,11 +1,10 @@
 # pwmstatus.py
 
 from versions import versions
-versions[__name__] = 1
-# based on RGBSTatus
+versions[__name__] = 10
+# 10: converted to new standard
 
 import time
-from core import info, debug, started
 import asyncio
 from machine import Pin, PWM
 

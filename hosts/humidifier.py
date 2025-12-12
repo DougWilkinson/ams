@@ -1,14 +1,13 @@
 # humidifier.py
 
-version = (2, 0, 0)
-# 208: broke into scale.py and this file
+from versions import versions
+versions[__name__] = 1
+# 1: converted to new standard for device and hass
 
-from core import info, latch
 from hx711 import HX711
 from scale import Scale
 
-hx = HX711(hxclock_pin=18, hxdata_pin=19, k=229, max=1000, offset=1450, samples=5)
-testbed = Scale("humidifier_water", hx, diff=10)
+#hx = HX711(hxclock_pin=18, hxdata_pin=19, k=229, max=1000, offset=1450, samples=5)
+hx = HX711(hxclock_pin=13, hxdata_pin=12, k=229, max=1000, offset=1450, samples=5)
+water_level = Scale("humidifier_water", hx, diff=10)
 
-async def start(hostname):
-	await latch.wait()

@@ -1,4 +1,5 @@
-# soaplidar.py
+# soap12v.py
+# lidar sensor with separate 12v motor dc source
 
 # Do first in case of reboot!
 from machine import Pin, I2C
@@ -7,18 +8,18 @@ motor = Pin(motor_pin, Pin.OUT)
 motor.off()
 
 from versions import versions
-versions[__name__] = 10
+versions[__name__] = 12
 # 10: conforms to new standard
+# 11: short counts on and off
+# 12: dispense time 500 ms
 
-from logger import info
+from logger import info, debug, error
 from pwmstatus import PWMStatus
 import asyncio
-
 from time import sleep
 from device import Device
 
-dispense_ms = 1000
-
+dispense_ms = 500
 red_pin = 1
 green_pin = 2
 blue_pin = 3
@@ -29,12 +30,17 @@ info(f'dispense_seconds: {dispense_ms}' )
 wait_trigger_led = PWMStatus(green_pin, brightness=30)
 wait_clear_led = PWMStatus(blue_pin, brightness=50)
 
+#########################
+# lidar setup
+########################
+
 from vl53l0x import VL53L0X
+from machine import I2C, Pin
 
 vlx_i2c = I2C(scl=Pin(8), sda=Pin(9))
-sensor = VL53L0X("soap_lidar", vlx_i2c)
+sensor = VL53L0X("soap12v_lidar", vlx_i2c)
 
-dispense_counts = Device("kitchen_soap_uses", "0", units="count", save_state=True)
+dispense_counts = Device("hand_soap_uses", "0", units="count", save_state=True)
 
 async def start():
 	while True:

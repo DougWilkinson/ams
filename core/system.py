@@ -1,26 +1,29 @@
 # settings.py
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 11
 
 # 2: added microdot and web server/ap mode
 # 3: split off profiles, logger and localtime
+# 10: refactored
+# 11: removed maintain_timezone
 
-from os import stat, listdir, remove, uname
+from os import uname
 import asyncio
 from machine import soft_reset, freq
 from platform import platform
 from gc import mem_free, mem_alloc
 from time import sleep
-import binascii
-from network import WLAN
-from factory_defaults import factory_defaults
+from localtime import offset_time
 
 from profiles import Profile, espMAC, get_profiles
 from logger import info, error, debug
-from localtime import offset_time, local_time
+# from localtime import offset_time, local_time
 
 config = Profile(espMAC)
+
+offset_time(config.timezone)
+info("system: timezone set from config: {}".format(config.timezone) )
 
 versions["hostname"] = config.hostname
 versions["mac"] = espMAC
@@ -52,14 +55,14 @@ def reboot(boot=10):
 	while True:
 		pass
 
-async def maintain_timezone():
+# async def maintain_timezone():
 	
-	last_timezone = -99
+# 	last_timezone = -99
 
-	while True:
-		if config.timezone != last_timezone:
-			offset_time(config.timezone)
-			last_timezone = config.timezone
-		await asyncio.sleep(5)
+# 	while True:
+# 		if config.timezone != last_timezone:
+# 			offset_time(config.timezone)
+# 			last_timezone = config.timezone
+# 		await asyncio.sleep(5)
 
-start(maintain_timezone)
+# start(maintain_timezone)

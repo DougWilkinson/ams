@@ -22,4 +22,4 @@ ssd = GC9A01(display_spi, Pin(15, Pin.OUT, value=1), Pin(5, Pin.OUT, value=0), P
 
 #font = XglcdFont('Lucida_Console18x29.c',18,29)
 
-oledclock = BlitClock("analogclock",  display=ssd, color=ssd.BLUE )
+oledclock = BlitClock("test_watch",  display=ssd, color=ssd.BLUE )
