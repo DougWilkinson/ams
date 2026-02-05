@@ -1,16 +1,17 @@
 #ledclock.py
 
 from versions import versions
-versions[__name__] = 3
-# async version
+versions[__name__] = 10
+# 10: updated to new standard (no hass_setup)
 
-import time
-from core import offset_time, debug, started
+from localtime import offset_time
+from events import time_synced
+from system import debug, start
 from machine import Pin, RTC
 from neopixel import NeoPixel
 import asyncio
 from light import Light
-from flag import get
+# from flag import get
 
 # hand_index is a map to translate 0-12 to the starting led#
 
@@ -47,8 +48,9 @@ class LEDClock(Light):
 		self.tail = tail_length
 		self.always_on = always_on
 
-		asyncio.create_task(self.handle_seconds())
-		asyncio.create_task(self.handle_clock())
+		start(self.handle_seconds)
+		start(self.handle_clock)
+
 		# asyncio.create_task(self.rgb_handler())
 		#asyncio.create_task(self.flash_red())
 
@@ -96,9 +98,10 @@ class LEDClock(Light):
 
 	async def flash_red(self):
 		# All red flashing at edges if lost time
-		started("flash_red")
+		debug("flash_red: running")
+
 		while True:
-			while get("timesynced"):
+			while time_synced.is_set():
 				await asyncio.sleep(2)
 			debug("time not set!")
 			for i in range(12):
@@ -111,7 +114,7 @@ class LEDClock(Light):
 			await asyncio.sleep_ms(500)
 
 	async def handle_seconds(self):
-		started("handle_seconds")
+		debug("handle_seconds: running")
 		lastsec = int(RTC().datetime()[6]/5)
 		last_displayed = 0
 		# Draw second hand
@@ -142,6 +145,7 @@ class LEDClock(Light):
 			lastsec = sec
 
 	async def handle_clock(self):
+		debug("handle_clock: running")
 		self.last_min = 0
 		self.last_hour = 0
 		self.next_hour = 1

@@ -1,15 +1,9 @@
 # wifieast.py
-from versions import versions
-versions[__name__] = 1
 
-import asyncio
-from core import started, latch, hostname
+from versions import versions
+versions[__name__] = 10
+# 10: using webconfig (no ha_setup)
 
 from wifiscanner import WifiScanner
 
-scanner = WifiScanner(hostname)
-
-async def start(hostname):
-	started(hostname)
-	while True:
-		await latch.wait()
+scanner = WifiScanner("wifieast")

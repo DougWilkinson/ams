@@ -1,3 +1,11 @@
+# ssh1106.py
+
+from versions import versions
+versions[__name__] = 10
+# 10: use with webconfig and supports color_mode value
+
+
+
 # MicroPython SH1106 OLED driver, I2C and SPI interfaces
 # The MIT License (MIT)
 #
@@ -41,6 +49,7 @@ class SH1106(framebuf.FrameBuffer):
     def __init__(self, width, height, external_vcc, rotate=0):
         self.width = width
         self.height = height
+        self.color_mode = framebuf.MONO_VLSB
         self.external_vcc = external_vcc
         self.flip_en = rotate == 180 or rotate == 270
         self.rotate90 = rotate == 90 or rotate == 270

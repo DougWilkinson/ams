@@ -2,7 +2,8 @@
 # LCD/Touch module.
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 10
+# 10: added color_mode support for FrameBuffer (blitclock)
 
 from time import sleep
 from math import cos, sin, pi, radians
@@ -116,6 +117,7 @@ class Ili9341(FrameBuffer):
 		self.rst = Pin(rst)
 		self.width = width
 		self.height = height
+		self.color_mode = RGB565
 		self.rotation = self.ROTATE[rotation]
 
 		# Initialize GPIO pins and set implementation specific methods
@@ -168,8 +170,8 @@ class Ili9341(FrameBuffer):
 			y1 (int):  Ending Y position.
 			data (bytes): Data buffer to write.
 		"""
-		self.write_cmd(self.SET_COLUMN, *ustruct.pack(">HH", x0, x1))
-		self.write_cmd(self.SET_PAGE, *ustruct.pack(">HH", y0, y1))
+		self.write_cmd(self.SET_COLUMN, *struct.pack(">HH", x0, x1))
+		self.write_cmd(self.SET_PAGE, *struct.pack(">HH", y0, y1))
 
 		self.write_cmd(self.WRITE_RAM)
 		self.write_data(data)

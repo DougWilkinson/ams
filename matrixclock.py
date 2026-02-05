@@ -1,8 +1,9 @@
 # matrixclock.py
 
 from versions import versions
-versions[__name__] = 10
+versions[__name__] = 11
 # 10: converted to new device, profile and hass
+# 11: added seconds bar to display
 
 # text displayed based on values, not when sent from mqtt
 from time import time, ticks_diff, ticks_ms, sleep_ms
@@ -20,6 +21,7 @@ import asyncio
 
 width=6
 map=[40,41,42,43,44,45,46,47,39,38,37,36,35,34,33,32,24,25,26,27,28,29,30,31,23,22,21,20,19,18,17,16,8,9,10,11,12,13,14,15,7,6,5,4,3,2,1,0]
+seconds_map = [240,239,224,223,208,207,192,191,176,175,160,159,144,143,128,127,112,111,96,95,80,79,64,63,48,47,32,31,16,15]
 
 def convert_time(hour,minute):
 	h = ' ' + str(hour)
@@ -122,17 +124,27 @@ class MatrixClock:
 				if not ( achar[c] & 1 << r):
 					buffer[(digit * 8 * w) + self.map[r + buffrow - digitrow + (c*8)]] = (0,0,0)
 
+	def update_seconds(self):
+		second = offset_time()[5]
+		for s in range(30):
+			if int(second /2) >= s:
+				self.leds[seconds_map[s]] = (0,0,5)
+			else:
+				self.leds[seconds_map[s]] = (0,0,0)
+
 	async def colon_handler(self):
 		info("blink_colon: started")
 		# 114,115,117,118,121,124 to make larger colon
 		while True:
 			self.leds[122] = self.colon
 			self.leds[125] = self.colon
+			self.update_seconds()
 			self.leds.write()
 			await asyncio.sleep(1)
 			self.leds[122] = (0,0,0)
 			self.leds[125] = (0,0,0)
 			self.leds.write()
+			self.update_seconds()
 			await asyncio.sleep(1)
 
 	def display_clock(self, color):
@@ -157,6 +169,8 @@ class MatrixClock:
 			for row in range(6,-1,-1):
 				self.shiftdown(leds, d)
 				self.filldigit(leds, color, ordnum=digits[4-d],digit=d, buffrow = 1, digitrow=row)
+				
+				self.update_seconds()
 				leds.write()
 				sleep_ms(self.fade)
 

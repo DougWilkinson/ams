@@ -2,15 +2,15 @@
 
 # radar 24GHz sensor (Seeed XIAO)
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 10
+# 10: support for webconfig (no ha_setup)
 
 from machine import UART, Pin
 from time import time, sleep_ms
-from core import debug, info, error, latch
+from logger import debug, info, error
 import asyncio
 from neopixel import NeoPixel
 
-from hass import ha_setup
 from device import Device
 import struct
 
@@ -54,14 +54,14 @@ class Presence:
 		self.buffer = bytearray(512)
 		self.last_reading = None
 
-		self.motion = Device("{}_motion".format(name), "OFF", dtype="binary_sensor", notifier_setup=ha_setup, publish=False )
-		self.m_distance = Device("{}_motion_distance".format(name), state="0", units="cm", notifier_setup=ha_setup, publish=False )
+		self.motion = Device("{}_motion".format(name), "OFF", dtype="binary_sensor" )
+		self.m_distance = Device("{}_motion_distance".format(name), state="0", units="cm" )
 		
-		self.presence = Device("{}_presence".format(name), "OFF", dtype="binary_sensor", notifier_setup=ha_setup, publish=False )
-		self.p_distance = Device("{}_presence_distance".format(name), state="0", units="cm", notifier_setup=ha_setup, publish=False )
-		self.energy = Device("{}_presence_energy".format(name), state="0", units="mJ", notifier_setup=ha_setup, publish=False )
+		self.presence = Device("{}_presence".format(name), "OFF", dtype="binary_sensor" )
+		self.p_distance = Device("{}_presence_distance".format(name), state="0", units="cm" )
+		self.energy = Device("{}_presence_energy".format(name), state="0", units="mJ" )
 
-		self.det_distance = Device("{}_detector_distance".format(name), state="0", units="cm", notifier_setup=ha_setup, publish=False )
+		self.det_distance = Device("{}_detector_distance".format(name), state="0", units="cm" )
 
 		self.ack = False
 		
@@ -73,8 +73,8 @@ class Presence:
 		self.p_energy = 0
 		self.det_dist = 0
 
-		self.m_door = Device("{}_motion_door".format(name), state="0", units="cm", notifier_setup=ha_setup )
-		self.p_door = Device("{}_presence_door".format(name), state="0", units="cm", notifier_setup=ha_setup )
+		self.m_door = Device("{}_motion_door".format(name), state="0", units="cm" )
+		self.p_door = Device("{}_presence_door".format(name), state="0", units="cm" )
 		self.get_resolution()
 		self.read_params()
 

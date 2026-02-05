@@ -1,17 +1,18 @@
 # ble.py
 
 from versions import versions
-versions[__name__] = 5
+versions[__name__] = 10
 # 2010: added exception checking in ble_loop
 # 2011: callback: connection: save bytes(addr) instead of "addr"
 # 2012: added exception handling in callback
 # 5: removed u prefixes
+# 10: refactored version (no hass_setup)
 
 import bluetooth
 import binascii
 import time
 from machine import reset
-from core import debug, info, error
+from system import debug, info, error, start
 import asyncio
 from msgqueue import MsgQueue
 
@@ -96,8 +97,8 @@ async def gap_reset():
 
 # Scan for 60 seconds, allow polling, repeat						
 async def ble_loop():
-	asyncio.create_task(handle_result())
-	asyncio.create_task(handle_connect())
+	start(handle_ble_result)
+	start(handle_ble_connect)
 	while True:
 		try:
 			info("ble_loop: scanning - found {} devices".format(len(scanned_devices) ) )
@@ -115,14 +116,14 @@ async def ble_loop():
 		# except:
 		# 	error("Unknown Error in ble_loop")
 
-async def handle_result():
+async def handle_ble_result():
 	global result
 	async for mac, data in result:
 		try:
 			addr_type, addr, connectable, rssi, bdata = data
 			# bdata = bytes(adv_data)
 			oui = mac[0:6]
-			#debug("handle_result: received")
+			#debug("handle_ble_result: received")
 			
 			# add to scanned or polled if oui matches
 			if mac not in scanned_devices and mac not in polled_devices:
@@ -153,16 +154,16 @@ async def handle_result():
 				scanned_devices[mac].device.update(bdata)
 			
 		except Exception as e:
-			error("handle_result: Caught exception")
+			error("handle_ble_result: Caught exception")
 			error(e)
 
-async def handle_connect():
+async def handle_ble_connect():
 	global ble_connect
 	async for mac, data in ble_connect:
-		#debug("handle_connect: {}".format(mac) )
+		#debug("handle_ble_connect: {}".format(mac) )
 		try:
 			conn_handle, addr_type, addr = data
-			# debug("handle_connect: mac={}, connhandle={}, addr_t={}, addr={}".format(mac, conn_handle, addr_type,
+			# debug("handle_ble_connect: mac={}, connhandle={}, addr_t={}, addr={}".format(mac, conn_handle, addr_type,
 								# binascii.hexlify(addr).decode()) )
 			# set conn_handle
 			polled_devices[mac].conn_handle = conn_handle
@@ -170,7 +171,7 @@ async def handle_connect():
 			conn_table[str(conn_handle)] = polled_devices[mac]
 			polled_devices[mac].connected.set()
 		except Exception as e:
-			error("handle_connect: Caught exception")
+			error("handle_ble_connect: Caught exception")
 			error(e)
 
 # govee device_class example is Govee5074
@@ -295,7 +296,7 @@ async def poll(bdevice):
 
 		# wait for 10 seconds for reply
 		# when connected, conn_table and conn_handle are set
-		# in handle_connect Coro
+		# in handle_ble_connect Coro
 		await asyncio.wait_for(bdevice.connected.wait(), 5)
 
 		# connected, send discover (step 2)
@@ -337,3 +338,5 @@ async def poll(bdevice):
 ble = bluetooth.BLE()
 ble.active(True)
 ble.irq(callback)
+
+start(ble_loop)

@@ -1,19 +1,22 @@
 # lixieclock.py
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 10
+# 10: support for webconfig (no hass_setup)
 
-from time import time, sleep_ms
-from random import getrandbits
+from time import sleep_ms
 from device import Device
 from neopixel import NeoPixel
 
-from core import offset_time, error, debug, started
+from events import time_synced
+from system import start
+from localtime import offset_time
+from logger import info, error, debug
 from machine import Pin, RTC
+
 import asyncio
-from flag import get
+
 from machine import Timer
-from hass import ha_setup
 
 time_known = asyncio.Event()
 
@@ -48,9 +51,11 @@ class LixieClock:
 		self.fade_step = fade_step
 		self.fivesec = False
 		self.last = [4,0,4,0]
-		self.transition = Device(name + "_transition", state="fade", notifier_setup=ha_setup)
-		self.mode = Device(name + "_mode", state="clock12", notifier_setup=ha_setup)
-		self.onoff = Device(name, state="ON", dtype="switch", notifier_setup=ha_setup)
+
+		self.transition = Device(name + "_transition", state="fade" )
+		self.mode = Device(name + "_mode", state="clock12" )
+		self.onoff = Device(name, state="ON", dtype="switch" )
+
 		self.colon = False
 		all_off(self.mled)
 		all_off(self.hled)
@@ -60,12 +65,12 @@ class LixieClock:
 		self.last_hour = 42
 		self.next_hour = 42
 
-		asyncio.create_task(self.handle_clock())
-		asyncio.create_task(self.handle_colon())
-		asyncio.create_task(self.flash_time())
-		asyncio.create_task(self.mode_handler())
-		asyncio.create_task(self.onoff_handler())
-		asyncio.create_task(self.transition_handler())
+		start(self.handle_clock)
+		start(self.handle_colon)
+		start(self.flash_time)
+		start(self.mode_handler)
+		start(self.onoff_handler)
+		start(self.transition_handler)
 
 	async def onoff_handler(self):
 		async for _ , ev in self.onoff.q:
@@ -88,15 +93,16 @@ class LixieClock:
 
 	async def flash_time(self):
 		# Signals that time is not set
-		started("flash_time")
+		debug("flash_time: running")
+
 		while True:
-			while get("timesynced"):
+			while time_synced.is_set():
 				await asyncio.sleep(2)
 			error("time not synced!")
 			time_known.clear()
 			self.fade_step = 5
 			saved_delay = self.flip_delay
-			while not get("timesynced"):
+			while not time_synced.is_set():
 				self.refresh_hands()
 				await asyncio.sleep_ms(200)
 			error("time synced!")
@@ -135,6 +141,8 @@ class LixieClock:
 		self.mled.write()
 
 	async def handle_colon(self):
+		debug("handle_colon: running")
+
 		while True:
 			await time_known.wait()
 			self.colon = False
@@ -149,6 +157,8 @@ class LixieClock:
 			await asyncio.sleep_ms(500)
 
 	async def handle_clock(self):
+		debug("handle_clock: running")
+		
 		while True:
 			ot = offset_time()
 			self.next_min = ot[4]
@@ -169,6 +179,7 @@ class LixieClock:
 
 
 	def refresh_hands(self):
+	
 		if self.onoff.state != "ON":
 			return
 

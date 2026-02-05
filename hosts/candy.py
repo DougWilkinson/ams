@@ -1,16 +1,21 @@
-# bean_dispenser.py
-from versions import versions
-versions[__name__] = 3
+# candy.py
 
-import asyncio
-# from hx711 import HX711
+from versions import versions
+versions[__name__] = 6
+# 5: converted to new standard (no hass_setup)
+# 6: moved to s3mini hardware
+
+
+from machine import Pin
+
+# pin 23 --> 8
+motor_pin = Pin(8, Pin.OUT)
+motor_pin.off()
+
 from tm1637 import TM1637
-from core import latch
-from dispenser import Dispenser
 from binary import Binary
 from switch import Switch
-from tray import Tray
-import hass
+
 
 # old hardware 
 # display = TMClock(data_pin=0, clock_pin=4, brightness=5)
@@ -18,15 +23,15 @@ import hass
 # button = Binary("candy_button", pin=15, invert=False)
 # dispense = Switch("candy_dispense", switch_pin=5, off_delay=3, trigger_device=button.state)
 
-display = TM1637("candy",data_pin=21, clock_pin=22, brightness=5)
+# pin 21 --> 6
+# pin 22 --> 7
+display = TM1637("candy",data_pin=6, clock_pin=7, brightness=5)
 
-tray_sensor = Binary("candy_tray", pin=19, invert=True)
+# pin 19 --> 5
+tray_sensor = Binary("candy_tray", pin=5, invert=True)
 
-button = Binary("candy_button", pin=18, invert=False)
+# pin 18 --> 4
+button = Binary("candy_button", pin=4, invert=False)
 
-dispense = Switch("candy_dispense", switch_pin=23, off_delay=3, trigger_device=button.state, condition=tray_sensor.state)
+dispense = Switch("candy_dispense", motor_pin, off_delay=3, trigger_device=button.state, condition=tray_sensor.state)
 
-
-async def start(hostname):
-	while True:
-		await latch.wait()

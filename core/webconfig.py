@@ -1,9 +1,12 @@
 # webconfig.py
 
 from versions import versions
-versions[__name__] = 12
+versions[__name__] = 15
 # 2: supported profiles and logger split
 # 12: changed logger to non-class
+# 13: log_level added to tail_console (future url support log level filtering)
+# 14: modified tail_console to handle exceptions better
+# 15: added exception_history to tail_console
 
 import os
 import gc
@@ -693,13 +696,26 @@ label {{ display:block; margin-top: 10px; }}
 			if not self._require_auth(request):
 				return microdot.Response('Unauthorized', status_code=401)
 
-			try:
-				async for line in logger.console_history:
-					await sse.send( line.strip() )
+			client_connected = True
+			
+			# send exceptions to the client
+			for e in logger.exception_history:
+				for each_line in e.split("\n"):
+					await sse.send( each_line )
 					await sse.send( "" )
 
-			except asyncio.CancelledError:
-				print("tail_console: client disconnected")
+			while client_connected:
+				try:
+					async for log_level, line in logger.console_history:
+						await sse.send( line.strip() )
+						await sse.send( "" )
+
+				except asyncio.CancelledError:
+					print("tail_console: client disconnected")
+					client_connected = False
+
+				except Exception as e:
+					print("tail_console: Exception: {}".format(e))
 
 
 	def _login_form(self):

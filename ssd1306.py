@@ -1,3 +1,11 @@
+# ssd1306.py
+
+from versions import versions
+versions[__name__] = 10
+# 10: use with webconfig and supports color_mode value
+
+
+
 # MicroPython SSD1306 OLED driver, I2C and SPI interfaces
 
 from micropython import const
@@ -29,6 +37,7 @@ class SSD1306(framebuf.FrameBuffer):
     def __init__(self, width, height, external_vcc):
         self.width = width
         self.height = height
+        self.color_mode = framebuf.MONO_VLSB
         self.external_vcc = external_vcc
         self.pages = self.height // 8
         self.buffer = bytearray(self.pages * self.width)

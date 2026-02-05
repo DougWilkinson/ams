@@ -1,11 +1,11 @@
 #air.py
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 5
+# 5: using refactored code (no hass_setup)
 
-from core import debug, info, error
+from system import error
 from device import Device
-from hass import ha_setup
 
 class WP6003:
 
@@ -19,24 +19,16 @@ class WP6003:
 		name = "wp6003_" + mac + "_"
 		self.temp = Device(name + "temperature", 
 							"0",
-							units = 'F',
-							notifier_setup=ha_setup,
-							publish=False)
+							units = 'F' )
 		self.tvoc = Device(name + "TVOC", 
 							"0", 
-							units = "mg/m3",
-							notifier_setup=ha_setup,
-							publish=False)
+							units = "mg/m3" )
 		self.hcho = Device(name + "HCHO", 
 							"0", 
-							units = "mg/m3",
-							notifier_setup=ha_setup,
-							publish=False)
+							units = "mg/m3" )
 		self.co2 = Device(name + "CO2", 
 							"0", 
-							units = "ppm",
-							notifier_setup=ha_setup,
-							publish=False)
+							units = "ppm" )
 
 	def update(self, data):
 		try:

@@ -1,13 +1,15 @@
 # wifiscanner.py
 
 from versions import versions
-versions[__name__] = 1
+versions[__name__] = 10
+# 10: using webconfig (no ha_setup)
 
 import asyncio
-from hass import ha_setup
 from device import Device
 from time import sleep, time
-from core import wlan, info, error, localtime
+from wifi import wlan
+from logger import debug, info, error 
+from localtime import offset_time
 from binascii import hexlify
 
 def show(bssid, detail):
@@ -27,8 +29,8 @@ class WifiScanner():
 			
 			# close 0 to -75 db
 			# far -76 to -100 db
-			self.ssid_near[i+1] = Device("{}/ssid_near_{}".format(hostname,channel), "-1", units="ssids", ro=True, publish=False, notifier_setup=ha_setup)
-			self.ssid_far[i+1] = Device("{}/ssid_far_{}".format(hostname,channel), "-1", units="ssids", ro=True, publish=False, notifier_setup=ha_setup)
+			self.ssid_near[i+1] = Device("{}/ssid_near_{}".format(hostname,channel), "-1", units="ssids", subscribe=False)
+			self.ssid_far[i+1] = Device("{}/ssid_far_{}".format(hostname,channel), "-1", units="ssids", subscribe=False)
 			
 		asyncio.create_task(self.scan(hostname))
 	
@@ -61,7 +63,7 @@ class WifiScanner():
 
 				# just update last seen
 				if index in self.networks:
-					self.networks[index]['last_seen'] = localtime()
+					self.networks[index]['last_seen'] = offset_time()
 					self.networks[index]['last_secs'] = time()
 					if signal != int(self.networks[index]['device'].state):
 						self.networks[index]['db'] = db
@@ -72,14 +74,14 @@ class WifiScanner():
 				# add to network dict
 				info("{}/{}".format(hostname, index) )
 				self.networks[index] = { 'name': name, 
-					'device': Device("{}/{}".format(hostname, index), str(signal), units="%", ro=True, notifier_setup=ha_setup),
+					'device': Device("{}/{}".format(hostname, index), str(signal), dtype="wifi", units="%", subscribe=False, publish=False),
 					'channel': channel,
 					'db': db,
 					'bssid': bssid,
 					'security': security,
 					'hidden': hidden,
-					'first_seen': localtime(),
-					'last_seen': localtime(),
+					'first_seen': offset_time(),
+					'last_seen': offset_time(),
 					'last_secs': time()
 					}
 

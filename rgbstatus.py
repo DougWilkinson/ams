@@ -1,13 +1,16 @@
 # rgbstatus.py
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 10
+# 10: support for webconfig (no hass_setup)
 
 import time
-from core import info, debug, started
+from system import start
+from logger import debug, info
 from device import Device
-from hass import ha_setup
+
 import asyncio
+
 from machine import Pin
 from neopixel import NeoPixel
 
@@ -19,11 +22,11 @@ class RGBStatus:
 		self.setall()
 		self.brightness = brightness
 		self.min_brightness = min_brightness
-		self.status = Device(name, "unknown", notifier_setup=ha_setup)
+		self.status = Device(name, "unknown")
 		self.urgent_ms = urgent_ms
 		self.glow_ms = glow_ms
 		self.last = time.ticks_ms()
-		asyncio.create_task(self.update())
+		start(self.update)
 
 	def setall(self, color=(0,0,0)):
 		if self.leds is None:
@@ -45,6 +48,8 @@ class RGBStatus:
 		return pulse, npulse
 	
 	async def update(self, delay=5):
+		info("rgbstatus_update: running")
+
 		# pulse = time.ticks_diff(time.ticks_ms(),self.last)
 		# if pulse > self.flash_urgent_ms:
 		# 	pulse = self.flash_urgent_ms
@@ -55,7 +60,9 @@ class RGBStatus:
 		# npulse = self.brightness - pulse
 		# npulse = 0 if npulse < 0 else npulse
 		# Purple pulse - Invalid/Init state
+		
 		laststate = ""
+		
 		while True:
 			if "steady" not in self.status.state:
 				self.leds.write()

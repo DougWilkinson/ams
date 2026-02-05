@@ -1,12 +1,15 @@
 #XPT2046.py
 # Touch module on ili9341
-# asyncio version
 
-from core import started, info
+from versions import versions
+versions[__name__] = 10
+# 10: converted to webconfig (no hass_setup)
+
+from system import start
+from logger import info
 from time import sleep, time
 import asyncio
 from device import Device
-from hass import ha_setup
 
 class Touch(object):
 	"""Serial interface for XPT2046 Touch Screen Controller."""
@@ -54,7 +57,7 @@ class Touch(object):
 		self.y_multiplier = height / (y_max - y_min)
 		self.y_add = y_min * -self.y_multiplier
 		
-		asyncio.create_task(self.get_touch())
+		start(self.get_touch)
 
 		if int_pin is not None:
 			self.int_pin = int_pin
@@ -65,9 +68,9 @@ class Touch(object):
 						handler=self.int_press)
 
 	async def get_touch(self):
-		started("Touch")
+		info("get_touch: runnning")
 		last_touch = time()
-		touch = Device("touch", "0,0", dtype="sensor", ro=True, publish=False, notifier_setup=ha_setup)		
+		touch = Device("touch", "0,0", subscribe=False)		
 		while True:
 			# get a new value
 			sample = self.raw_touch()  # get a touch

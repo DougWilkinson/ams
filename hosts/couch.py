@@ -2,19 +2,16 @@
 # testing esp32-s2 on upython v1.24
 
 from versions import versions
-versions[__name__] = 1
+versions[__name__] = 10
+# 10: support for webconfig (no ha_setup)
 
-from core import latch, hostname
 #from ledclock import LEDClock
 from presence import Presence
 
 #from neopixel import NeoPixel
-import asyncio
 
-detector = Presence(hostname)
+detector = Presence("couch")
 
-async def start(hostname):
-	await latch.wait()
 
 #motion = Binary("dining_motion", pin=5, invert=False)
 # clock = LEDClock("bigclock2", pin=12, num_leds=116, 

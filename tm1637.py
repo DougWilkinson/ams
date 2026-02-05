@@ -1,10 +1,15 @@
+# tm1637.py
 
+from versions import versions
+versions[__name__] = 5
+# 5: converted to new standard (no hass_setup)
 
 from time import sleep_us
 from machine import Pin
-from core import info, error, started, offset_time
+from system import start
+from logger import info, error
+from localtime import offset_time
 from device import Device
-from hass import ha_setup, ha_sub
 import asyncio
 from light import Light
 
@@ -27,7 +32,7 @@ class TM1637(Light):
 	def __init__(self, name, data_pin=0, clock_pin=4, brightness="2", clock=True, display_string="", speed="180" ):
 		super().__init__(name, state="ON", brightness=brightness)
 
-		started(f'tm1637:{name}, data_pin={data_pin}, clock_pin={clock_pin}, state={self.state.state}, brightness={brightness}, speed={speed}')
+		info(f'tm1637:{name}, data_pin={data_pin}, clock_pin={clock_pin}, state={self.state.state}, brightness={brightness}, speed={speed}')
 
 		self.dio = Pin(data_pin, Pin.OUT, value=0)
 		self.clk = Pin(clock_pin, Pin.OUT, value=0)
@@ -38,7 +43,7 @@ class TM1637(Light):
 		# self._write_data_cmd()
 		# self._write_dsp_ctrl()
 
-		self.string = Device(name + "/string", display_string, dtype="sensor", notifier_setup=ha_setup)
+		self.string = Device(name + "/string", display_string, dtype="sensor")
 		# self.brightness = Device(name + "/brightness", brightness, dtype="sensor", notifier_setup=ha_setup)
 		
 		self.clock = clock
@@ -71,7 +76,6 @@ class TM1637(Light):
 				self.colon = True
 
 	async def display_clock(self):
-		started('TM clock')
 		while True:
 			try:
 				if self.clock:

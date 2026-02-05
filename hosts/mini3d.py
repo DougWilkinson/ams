@@ -2,13 +2,14 @@
 # For esp32-s3 mini and sh1106 in red case
 
 from versions import versions
-versions[__name__] = 12
+versions[__name__] = 13
 # 10: converted to new standard
 # 11: added on/off handling back in
 # 12: added vl53l0x support
+# 13: changed vlx53l0x to use SoftI2C
 
 from vl53l0x import VL53L0X
-from machine import I2C, Pin
+#from machine import I2C, Pin
 
 from machine import Pin, SoftI2C
 
@@ -49,8 +50,8 @@ async def update_weather():
 start(update_weather)
 
 
-vlx_i2c = I2C(scl=Pin(8), sda=Pin(9))
-vlx_sensor = VL53L0X("laptop", vlx_i2c, poll_seconds=1, min=1, max=500)
+vlx_i2c = SoftI2C(scl=Pin(8), sda=Pin(9))
+vlx_sensor = VL53L0X("laptop", vlx_i2c, poll_seconds=1, min=1, max=200)
 
 vlx_device = Device("laptop_open", "OFF", dtype="binary_sensor" )
 

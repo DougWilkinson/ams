@@ -1,12 +1,15 @@
 # vl53l0x.py
 
 from versions import versions
-versions[__name__] = 12
+versions[__name__] = 14
 # 10: conforms to new standard
 # 11: timeout does not use asyncio sleep
 # 12: added poll_ms and poll_count, added in_range() check
+# 13: added debug messages
+# 14: added named debug messages
 
-from logger import info
+from logger import info, debug
+from device import Device
 import asyncio
 
 from micropython import const
@@ -130,7 +133,10 @@ class VL53L0X:
 		self.init()
 		self._started = False
 		self.measurement_timing_budget_us = 0
+
+		debug(f"init: {self.name}: set measurement_timing_budget_us")
 		self.set_measurement_timing_budget(self.measurement_timing_budget_us)
+
 		self.enables = {"tcc": 0,
 						"dss": 0,
 						"msrc": 0,
@@ -147,9 +153,14 @@ class VL53L0X:
 						 }
 		self.vcsel_period_type = ["VcselPeriodPreRange", "VcselPeriodFinalRange"]
 
+		debug(f"init: {self.name}: set Vcsel pulse periods")
 		self.set_Vcsel_pulse_period(self.vcsel_period_type[0], 18)
 		self.set_Vcsel_pulse_period(self.vcsel_period_type[1], 14)
+
+		debug(f"init: {self.name}: starting")
 		self.start()
+
+		debug(f"init: {self.name}: started")
 
 		self.values = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 		self.last_average = 0
@@ -201,7 +212,7 @@ class VL53L0X:
 					range_count += 1
 
 			if timeout_ms and time.ticks_ms() - start_ticks > timeout_ms:
-				info("timed out, dist = {}".format(dist))
+				debug(f"wait_for: {self.name}: timed out, dist = {dist}")
 				return
 
 			if timeout_ms:
@@ -212,7 +223,7 @@ class VL53L0X:
 			# if not range_count:
 			# 	time.sleep_us(5000)
 
-		info("range count reached, dist = {}".format(dist))
+		info(f"wait_for: {self.name}: range count reached, dist = {dist}")
 
 
 	def _registers(self, register, values=None, struct_type='B'):
@@ -245,8 +256,11 @@ class VL53L0X:
 			self._register(register, value)
 
 	def init(self, power2v8=True):
+		
+		debug(f"init: {self.name}: EXTSUP_HV 2v8")
 		self._flag(_EXTSUP_HV, 0, power2v8)
 
+		debug(f"init: {self.name}: I2C standard mode")
 		# I2C standard mode
 		self._config(
 			(0x88, 0x00),
@@ -255,26 +269,34 @@ class VL53L0X:
 			(0xff, 0x01),
 			(0x00, 0x00),
 		)
+
+		debug(f"init: {self.name}: stop variable")
 		self._stop_variable = self._register(0x91)
+
+		debug(f"init: {self.name}: reset sequence")
 		self._config(
 			(0x00, 0x01),
 			(0xff, 0x00),
 			(0x80, 0x00),
 		)
 
+		debug(f"init: {self.name}: disable signal_rate_msrc and signal_rate_pre_range limit checks")
 		# disable signal_rate_msrc and signal_rate_pre_range limit checks
 		self._flag(_MSRC_CONFIG, 1, True)
 		self._flag(_MSRC_CONFIG, 4, True)
 
+		debug(f"init: {self.name}: set final signal rate limit")
 		# rate_limit = 0.25
 		self._register(_FINAL_RATE_RTN_LIMIT, int(0.1 * (1 << 7)),
 					   struct_type='>H')
 
 		self._register(_SYSTEM_SEQUENCE, 0xff)
 
+		debug(f"init: {self.name}: get spad info and spad map")
 		spad_count, is_aperture = self._spad_info()
 		spad_map = bytearray(self._registers(_SPAD_ENABLES, struct_type='6B'))
 
+		debug(f"init: {self.name}: set reference spads")
 		# set reference spads
 		self._config(
 			(0xff, 0x01),
@@ -291,8 +313,10 @@ class VL53L0X:
 			elif spad_map[i // 8] & (1 << (i >> 2)):
 				spads_enabled += 1
 
+		debug(f"init: {self.name}: set spad map")
 		self._registers(_SPAD_ENABLES, spad_map, struct_type='6B')
 
+		debug(f"init: {self.name}: _config a bunch of parameters")
 		self._config(
 			(0xff, 0x01),
 			(0x00, 0x00),
@@ -389,8 +413,13 @@ class VL53L0X:
 			(0x80, 0x00),
 		)
 
+		debug(f"init: {self.name}: set GPIO INTERRUPT")
 		self._register(_INTERRUPT_GPIO, 0x04)
+
+		debug(f"init: {self.name}: set GPIO ACTIVE HIGH")
 		self._flag(_GPIO_MUX_ACTIVE_HIGH, 4, False)
+
+		debug(f"init: {self.name}: set INTERRUPT CLEAR")
 		self._register(_INTERRUPT_CLEAR, 0x01)
 
 		# XXX Need to implement this.
@@ -398,12 +427,18 @@ class VL53L0X:
 		# self._register(_SYSTEM_SEQUENCE, 0xe8)
 		# self._timing_budget(budget)
 
+		debug(f"init: {self.name}: _SYSTEM_SEQUENCE = 1")
 		self._register(_SYSTEM_SEQUENCE, 0x01)
 		self._calibrate(0x40)
+
+		debug(f"init: {self.name}: _SYSTEM_SEQUENCE = 2")
 		self._register(_SYSTEM_SEQUENCE, 0x02)
 		self._calibrate(0x00)
 
+		debug(f"init: {self.name}: _SYSTEM_SEQUENCE = 0xe8")
 		self._register(_SYSTEM_SEQUENCE, 0xe8)
+
+		debug(f"init: {self.name}: Completed")
 
 	def _spad_info(self):
 		self._config(
@@ -413,7 +448,8 @@ class VL53L0X:
 
 			(0xff, 0x06),
 		)
-		self._flag(0x83, 3, True)
+		# self._flag(0x83, 3, True) <<<----- BUGFIX
+		self._flag(0x83, 2, True)
 		self._config(
 			(0xff, 0x07),
 			(0x81, 0x01),
@@ -437,7 +473,8 @@ class VL53L0X:
 			(0x81, 0x00),
 			(0xff, 0x06),
 		)
-		self._flag(0x83, 3, False)
+		# self._flag(0x83, 3, False) <<<----- BUGFIX
+		self._flag(0x83, 2, False)
 		self._config(
 			(0xff, 0x01),
 			(0x00, 0x01),

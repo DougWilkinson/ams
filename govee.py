@@ -1,13 +1,13 @@
 # govee5074.py
 
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 10
 # first async version used with ble.py
+# 10: new standard (no hass_setup)
 
 import struct
-from core import debug, info, error
+from system import debug, info, error
 from device import Device
-from hass import ha_setup
 
 class Govee5074:
 
@@ -22,17 +22,11 @@ class Govee5074:
 		prefix = "govee5074_" + mac + "_"
 		
 		self.battery = Device(prefix + "battery", "0", 
-							units = '%', 
-							notifier_setup=ha_setup,
-							publish=False, ro=True)
+							units = '%' )
 		self.temp = Device(prefix + "temp", "0", 
-					 		units = 'F', 
-							notifier_setup=ha_setup,
-							publish=False, ro=True) 
+					 		units = 'F' ) 
 		self.humidity = Device(prefix + "humidity", "0", 
-							units = "%", 
-							notifier_setup=ha_setup,
-							publish=False, ro=True) 
+							units = "%" ) 
 
 	def update(self, data):
 		if bytes(Govee5074.data) in data:

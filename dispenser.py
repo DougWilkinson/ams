@@ -1,15 +1,21 @@
 # dispenser.py
 
+
+#################################
+##  NOTE USED ???
+#################################
+
 from versions import versions
-versions[__name__] = 3
+versions[__name__] = 5
 # 2 0 7: grams.set_state(0) to fix same value issue
 # 208: rgb status fix
+# 5: updated to new standard (no hass_setup)
 
 from time import sleep_ms
 from machine import Pin
-from core import info, started, error
+from logger import info, error
 from device import Device
-from hass import ha_setup
+from system import start
 import asyncio
 
 class Dispenser():
@@ -19,13 +25,15 @@ class Dispenser():
 	def __init__(self, name, display=None, rgb=None, grams="0", tray=None, motor_pin=5, hx_average=None ):
 		self.motor_pin = Pin(motor_pin, Pin.OUT)
 		self.motor_pin.off()
-		started(name)
+		info("dispenser: loading: {}".format(name) )
 
 		#self.activate = Device(name + "/activate", state="", notifier_setup=ha_setup)
-		self.grams = Device(name + "/grams", state=grams, units="g", notifier_setup=ha_setup)
-		self.dispensed = Device(name + "/dispensed", state="0", units="g", ro=True, notifier_setup=ha_setup)
+		self.grams = Device(name + "/grams", state=grams, units="g")
+		self.dispensed = Device(name + "/dispensed", state="0", units="g", ro=True)
+
 		# rgb is a device where string is set
 		# glow_one, glow_two, glow_green, pulse_red, unknown
+
 		self.rgb_status = rgb
 		# average is callable returning rolling average
 		self.hx_average = hx_average
@@ -41,8 +49,8 @@ class Dispenser():
 		self.error = ""
 		self.display = display
 		# start waiting for state change
-		asyncio.create_task(self._dispense_grams() )
-		asyncio.create_task(self._tray_status() )
+		start(self._dispense_grams )
+		start(self._tray_status )
 
 	async def _dispense_grams(self):
 		async for _, msg in self.grams.q:

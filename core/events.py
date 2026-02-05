@@ -1,8 +1,9 @@
 # events.py
 
 from versions import versions
-versions[__name__] = 10
+versions[__name__] = 11
 # 10: refactored version with Device changes
+# 11: added status_changed event
 
 import asyncio
 
@@ -41,3 +42,6 @@ subscribe_all = asyncio.Event()
 
 # Set when new devices are added
 device_added = asyncio.Event()
+
+# Set to update esp state and attributes in mqttserver
+status_changed = asyncio.Event()

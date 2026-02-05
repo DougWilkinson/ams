@@ -1,41 +1,53 @@
-# ledlight.py
+# nightlightmotion.py
+# ledlight with option to turn on and off nightlight triggered by motion
 
 from versions import versions
-versions[__name__] = 5
+versions[__name__] = 12
 # 4: gradual on and off and motion trigger changed
 # 5: fixed off task and led on/off tracking
+# 10: support for webconfig (no hass_setup) fixed fade_on and fade_off
+# 11: added fast_on to change values as they are adjusted
+# 12: added switch to turn off nightlight triggered by motion 
+#    (enabled if mqtt_connected event is not set for autonomous operation)
 
-from machine import Pin
 import time
-from core import info, debug, error
-import asyncio
-from neopixel import NeoPixel
+from logger import info, debug, error
+from system import start
 from device import Device
-from hass import ha_setup, ha_sub
+import asyncio
+
 from light import Light
 
 # {'light/name': {'module':'ledlight', 'leds': 20, 'pin':14, 'rgb': '192,24,0' }}
-class LedMotion(Light):
-	def __init__(self, name="ledmotion", led_pin=14, num_leds=3, trigger=None, on_seconds=15) -> None:
+class NightLightMotion(Light):
+	def __init__(self, name, neopixels, trigger=None, off_delay=15) -> None:
 		super().__init__(name=name)
 
-		self.leds = NeoPixel(Pin(led_pin), num_leds)
-		self.clear_leds()
+		self.leds = neopixels
+		self.fade_on()
+		self.fade_off()
 
-		self.on_seconds = on_seconds
+		self.off_delay = off_delay
 		self.motion = trigger.state
 		self.last_motion = 0
 		self.leds_on = asyncio.Event()
 
-		debug("ledlight: create tasks: {}".format(name) )
+		self.nightlight = Device(f"{name}_nightlight", "ON", dtype="switch")
+
 		if trigger:
-			asyncio.create_task(self.motion_trigger() )
-			asyncio.create_task(self.off_task() )
+			start(self.trigger_handler)
+			start(self.delay_handler )
 
-	def clear_leds(self):
-		self.set_leds(9,-1,-1)
+	def fade_off(self):
+		self.fade(9,-1,-1)
 
-	def set_leds(self, start=0, end=10, step=1, delay=0.05):
+	def fade_on(self):
+		self.fade(0,10,1)
+
+	def fast_on(self):
+		self.fade(9,10,1)
+
+	def fade(self, start, end, step, delay=0.05):
 		#info("set_leds: start: {}, end: {}, step: {}, delay: {}".format(start, end, step, delay))
 		max_bri = int(self.s_bri.state) / 255
 		r, g, b = self.s_rgb.state.split(",")
@@ -53,14 +65,17 @@ class LedMotion(Light):
 			# only turn on if not already on
 			if not self.leds_on.is_set():
 				info("set_state: turning on leds to {}/{}".format(self.s_bri.state, self.s_rgb.state))
-				self.set_leds()
+				self.fade_on()
 				self.leds_on.set()
+			else:
+				info("set to brightness and rgb (already on, need to change to new values)")
+				self.fast_on()
 			return
 		
 		# otherwise any other command will turn off if leds are on
 		if self.leds_on.is_set():
 			info("set_state: turning off leds")
-			self.clear_leds()
+			self.fade_off()
 			self.leds_on.clear()
 
 	# def set_brightness(self, ev):
@@ -73,28 +88,39 @@ class LedMotion(Light):
 	# 	# trigger led update
 	# 	self.s_rgb.set_state(ev)
 
-	async def off_task(self):
+	async def delay_handler(self):
 		while True:
 			await asyncio.sleep(1)
 
-			if time.time() - self.last_motion < self.on_seconds:
+			# only check for delay and turn off if nightlight switch is on
+			# otherwise wait until switch state changes to check again
+			if self.nightlight.state != "ON":
+				await self.nightlight.needs_publishing.wait()
+				continue
+
+			if time.time() - self.last_motion < self.off_delay:
 				continue
 
 			if self.state.state == "ON":
-				info("off_task: set_state called with: OFF")
+				info("delay_handler: set_state called with: OFF")
 				self.state.set_state("OFF")
 			
-			info("off_task: awaiting leds_on")
+			info("delay_handler: awaiting leds_on")
 			await self.leds_on.wait()
 			self.last_motion = time.time()
 
-	async def motion_trigger(self):
+	async def trigger_handler(self):
 		async for _ , ev in self.motion.q:
+			
+			# only turn on due to trigger event if nightlight switch is on
+			if self.nightlight.state != "ON":
+				continue
+
 			if ev == "ON":
 				self.last_motion = time.time()
-				info("motion_trigger: state is: {}".format(self.state.state))
+				info("trigger_handler: state is: {}".format(self.state.state))
 				if self.state.state == "OFF":
-					info("motion_trigger: set_state called with: ON")
+					info("trigger_handler: set_state called with: ON")
 					self.state.set_state("ON")
 
 """

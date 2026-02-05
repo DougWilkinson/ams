@@ -1,13 +1,11 @@
 # hlkradar.py
 
 from versions import versions
-versions[__name__] = 1
-# first async version used with ble.py
+versions[__name__] = 10
+# 10: using webconfig and no ha_setup
 
-import struct
-from core import debug, info, error
+from logger import debug, info, error
 from device import Device
-from hass import ha_setup
 
 class HLKRadar:
 

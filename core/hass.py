@@ -1,13 +1,14 @@
 # hass.py
 
 from versions import versions
-versions[__name__] = 14
+versions[__name__] = 15
 # 10: refactored version with Device changes
 # 11: fixed attrs and versions to set last_restart immediately
 # 12: moved timezone update for config and localtime to utc handler
 # 13: added await_subscribe to wait for wifi and mqtt to connect
 # 14: fixed missing binary_sensor in check for HA config
-# import flag
+# 15: moved device.configured check to only ha config a device if dtype is right and not already set to True (light_bri and light_rgb)
+
 import asyncio
 import time
 from gc import collect
@@ -86,8 +87,6 @@ async def device_handler():
 		info("hass: maintain_devices: new device added")
 
 		for device_name, device in device_list.items():
-			if device.configured:
-				continue
 
 			# Add to subscribe list if True
 			if device.subscribe:
@@ -106,11 +105,13 @@ async def device_handler():
 			if device.publish:
 				asyncio.create_task(publish_state(device))
 
-			device.configured = True
+			if device.configured:
+				continue
 							
 			# remaining steps only if we want to configure device in HA
 
 			if device.dtype not in "binary_sensor|sensor|switch|cover|light":
+				device.configured = True
 				continue
 			
 			info("hass: device setup: {}: {}".format(device.dtype, device.name))
@@ -135,6 +136,7 @@ async def device_handler():
 				msg['rgb_stat_t'] = "~_rgb/state"
 
 			publish_queue.put(haconfig_topic.format(device.dtype, device.name ), json.dumps(msg) )
+			device.configured = True
 			
 	
 # Set last will device here
@@ -217,7 +219,7 @@ async def utc_handler():
 					# clear watchdog to skip ntp time sync
 					time_synced.set()
 					config.timesync_secs = time.time()
-					debug("UTC: {}".format(j['UTC']) )
+					#debug("UTC: {}".format(j['UTC']) )
 
 				if "timezone" in j and (config.timezone - 24) != j['timezone']:
 						config.timezone = j['timezone'] + 24

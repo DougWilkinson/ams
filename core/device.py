@@ -3,15 +3,17 @@
 from json import loads, dumps
 
 from versions import versions
-versions[__name__] = 10
-
+versions[__name__] = 12
 # 4: always put value in q in set_state
 # 5: added save_state ,cleaned up u prefixes, load and save for states
 # 6: added save_now() to force save
 # 10: breaking changes any module needs to be updated
+# 11: added debug and error messages
+# 12: added backward compatibility for loading "state" vs device name as key
 
 from msgqueue import MsgQueue
-from events import subscribe_all, device_added
+from events import device_added
+from logger import debug, error
 import asyncio
 
 # used by hass to track device publishing and setup
@@ -81,9 +83,10 @@ class Device:
 
 		# When a device is created, trigger event to notifier
 		device_added.set()
+		debug("device: created: {} = {}".format(name, self.raw_state) )
 	
 	def set_state(self, state, topic="state"):
-
+		debug("set: {} = {}".format(self.name, state) )
 		self.q.put(topic, str(state) )
 
 		if self.raw_state != str(state):
@@ -98,10 +101,12 @@ class Device:
 	async def delayed_save(self):
 		while True:
 			await self.trigger_save.wait()
+			debug("device: delayed_save triggered: {}".format(self.name) )
 			await asyncio.sleep(30)
 
 			# check again to see if forced save_now() was done while waiting
 			if not self.trigger_save.is_set():
+				debug("device: delayed_save cancelled: {}".format(self.name) )
 				continue
 
 			save(self)
@@ -134,6 +139,11 @@ def load(name, key="run") -> str:
 				kv = loads(raw)
 				if key and key in kv:
 					return kv[key]
+				
+				# backwards compatibility
+				if "state" in kv:
+					return kv["state"]
+				
 				raw = file.readline()
 		return ''
 	except:
@@ -153,6 +163,8 @@ def save(name, value="run"):
 		with open(filename, "w") as file:
 			file.write(dumps({key: value}) )
 			file.write("\n")
+		debug("device: saved: filename: {}, key: {}, value: {}".format(filename, key, value) )
 		return True
 	except:
+		error("device: failed to save: filename: {}, key: {}, value: {}".format(filename, key, value) )
 		return False

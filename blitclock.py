@@ -1,13 +1,15 @@
 # blitclock.py
 
 from versions import versions
-versions[__name__] = 10
+versions[__name__] = 12
 # 5: support for gc9a01 driver (round display)
 # 10: refactored version with new Device and hass changes
+# 11: added support for display.color_mode
+# 12: added support for cx/cy, dcy (digital clock y position), arguments
 
+from system import start
 from time import sleep_ms, ticks_ms
-from machine import RTC
-from framebuf import FrameBuffer, RGB565
+from framebuf import FrameBuffer
 import array
 import math
 import json
@@ -19,13 +21,24 @@ from device import Device
 
 class BlitClock:
 	
-	def __init__(self, name, display, color=31, width=None, height=None, radius_factor=0.84, text=None, font=None, hand=5, effect="centered" ):
+	def __init__(self, name, display, color=31, width=None, height=None, radius_factor=0.84, text=None, font=None, hand=5, effect="centered",cx=None,cy=None, dcy=190 ):
 		self.display = display
 		self.width = width if width else self.display.width
 		self.height = height if height else self.display.height
 		# start with center of oled
-		self.cx = self.width >> 1
-		self.cy = self.height >> 1
+
+		if cx:
+			self.cx = cx
+		else:
+			self.cx = self.width >> 1
+
+		if cy:
+			self.cy = cy
+		else:
+			self.cy = self.height >> 1
+
+		self.dcy = dcy
+
 		self.clock_radius = int(self.width * radius_factor / 2)
 		self.text = text
 		self.font = font
@@ -33,19 +46,21 @@ class BlitClock:
 		self.color = color
 		self.effect = effect
 		# define buffers for face and each hand
-		self.face_fb = FrameBuffer(bytearray(self.width * self.height * 2), self.width, self.height, RGB565 )
-		self.s_hand_fb = FrameBuffer(bytearray(self.width * self.height * 2), self.width, self.height, RGB565 )
-		self.m_hand_fb = FrameBuffer(bytearray(self.width * self.height * 2), self.width, self.height, RGB565 )
-		self.h_hand_fb = FrameBuffer(bytearray(self.width * self.height * 2), self.width, self.height, RGB565 )
+		self.face_fb = FrameBuffer(bytearray(self.width * self.height * 2), self.width, self.height, self.display.color_mode )
+		self.s_hand_fb = FrameBuffer(bytearray(self.width * self.height * 2), self.width, self.height, self.display.color_mode )
+		self.m_hand_fb = FrameBuffer(bytearray(self.width * self.height * 2), self.width, self.height, self.display.color_mode )
+		self.h_hand_fb = FrameBuffer(bytearray(self.width * self.height * 2), self.width, self.height, self.display.color_mode )
 		self.seconds_color = 63488
 		self.onoff = Device(name, state="ON", dtype="switch")
 
-		asyncio.create_task(self.onoff_handler())
-		asyncio.create_task(self.clock_handler())
+		start(self.onoff_handler)
+		start(self.clock_handler)
 		if text:
-			asyncio.create_task(self.text_handler())
+			start(self.text_handler)
 
 	async def onoff_handler(self):
+		info("onoff_handler: running")
+
 		async for _ , ev in self.onoff.q:
 			info("onoff: {}".format(ev) )
 			if 'OFF' in ev:
@@ -54,6 +69,8 @@ class BlitClock:
 				self.display.display_on()
 
 	async def text_handler(self):
+		info("text_handler: running")
+
 		async for _, ev in self.text.q:
 			text = json.loads(ev)
 			self.draw_face(self.color)
@@ -104,6 +121,8 @@ class BlitClock:
 
 
 	async def clock_handler(self):
+		info("clock_handler: running")
+		
 		while True:
 			try:
 				last_minute = -1
@@ -142,7 +161,7 @@ class BlitClock:
 						self.update_hand(self.s_hand_fb, angle_second, fraction=0.8, color=self.color)
 
 						if self.text:
-							self.draw_text(self.s_hand_fb, 60, 190, "{}:{:0>2}:{:0>2}".format(hour,minute,second), 63)
+							self.draw_text(self.s_hand_fb, 60, self.dcy, "{}:{:0>2}:{:0>2}".format(hour,minute,second), 63)
 						
 						self.display.blit(self.face_fb, 0, 0)
 						self.display.blit(self.h_hand_fb, 0, 0, 0)
@@ -178,7 +197,7 @@ class BlitClock:
 		if w == 0:
 			return w, h
 
-		buf = FrameBuffer(b_letter, w, h, RGB565)
+		buf = FrameBuffer(b_letter, w, h, self.display.color_mode)
 		if landscape:
 			y -= w
 			frame_buffer.blit(buf, x, y, 0)

@@ -1,9 +1,9 @@
 #bigclock.py
 
 from versions import versions
-versions[__name__] = 4
+versions[__name__] = 10
+# 10: converted to webconfig (no hass_setup)
 
-from core import info, latch
 from ledclock import LEDClock
 from binary import Binary
 
@@ -16,6 +16,3 @@ clock = LEDClock("bigclock", pin=13, num_leds=116,
 		edge_index=[18,19,56,57,94,95,0,37,38,75,76,113,104],
 		min_hand_length=7, hour_hand_length=4, tail_length=3,
 		face_rgb=(0,0,0), hand_rgb=(25,25,25), always_on=104)
-
-async def start(hostname):
-		await latch.wait()
