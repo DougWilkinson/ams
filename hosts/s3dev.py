@@ -1,8 +1,9 @@
 # s3dev.py
 
 from versions import versions
-versions[__name__] = 10
+versions[__name__] = 11
 # 10: uses webconfig with no ha_setup
+# 11: fixed Clock and digits3d to use new method
 
 from framebuf import MONO_VLSB
 from machine import Pin, SoftI2C
@@ -16,6 +17,7 @@ from device import Device
 import asyncio
 
 from clock3dblit import Clock
+from digits3d import generate_digits
 
 # from hx711 import HX711
 # from scale import Scale
@@ -32,8 +34,12 @@ sh1106_i2c = SoftI2C(scl=Pin(1),sda=Pin(2))
 sh_display = SH1106_I2C(128, 64, sh1106_i2c )
 
 # sh_clock = BlitClock("sh1106", width=64, height=64, display=sh_display, bitmap=MONO_VLSB, hand=2)
+digits = generate_digits(scale=0.44)
 
-sh_clock = Clock("s3dev_clock3d", display=sh_display, scale=0.44)
+# y=21 for sh1106 centered with space above/below for small text
+digit_y = 21
+
+sh_clock = Clock("s3dev_clock3d", sh_display, digits, x=0, y=digit_y)
 
 
 ssd1306_i2c = SoftI2C(scl=Pin(41),sda=Pin(42))

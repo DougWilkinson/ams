@@ -1,15 +1,15 @@
-# nightlightmotion.py
+# nightlight.py
 # ledlight with option to turn on and off nightlight triggered by motion
 
 from versions import versions
-versions[__name__] = 12
+versions[__name__] = 13 
 # 4: gradual on and off and motion trigger changed
 # 5: fixed off task and led on/off tracking
 # 10: support for webconfig (no hass_setup) fixed fade_on and fade_off
 # 11: added fast_on to change values as they are adjusted
 # 12: added switch to turn off nightlight triggered by motion 
 #    (enabled if mqtt_connected event is not set for autonomous operation)
-
+# 13: in progress - change from superclass to defined Light class
 import time
 from logger import info, debug, error
 from system import start
@@ -19,10 +19,10 @@ import asyncio
 from light import Light
 
 # {'light/name': {'module':'ledlight', 'leds': 20, 'pin':14, 'rgb': '192,24,0' }}
-class NightLightMotion(Light):
+class NightLight:
 	def __init__(self, name, neopixels, trigger=None, off_delay=15) -> None:
-		super().__init__(name=name)
-
+		
+		self.light = Light(name)
 		self.leds = neopixels
 		self.fade_on()
 		self.fade_off()

@@ -84,12 +84,10 @@ class LixieClock:
 	async def mode_handler(self):
 		async for _ , ev in self.mode.q:
 			debug("mode: {}".format(ev) )
-			self.refresh_hands()
 
 	async def transition_handler(self):
 		async for _ , ev in self.transition.q:
 			debug("transition: {}".format(ev) )
-			self.refresh_hands()
 
 	async def flash_time(self):
 		# Signals that time is not set
@@ -158,24 +156,32 @@ class LixieClock:
 
 	async def handle_clock(self):
 		debug("handle_clock: running")
+		last_mode = self.mode.state
+		last_transition = self.transition.state
 		
 		while True:
 			ot = offset_time()
 			self.next_min = ot[4]
-			if self.last_min == self.next_min:
-				await asyncio.sleep(1)
-				continue
+			
+			if last_mode == self.mode.state and last_transition == self.transition.state:
+				if self.last_min == self.next_min:
+					await asyncio.sleep(1)
+					continue
+			
 			while self.colon:
 				await asyncio.sleep_ms(100)
+			
 			# time to change min/hour
 			hour = ot[3]
-			if self.mode and self.mode.state == 'clock12':
+			if self.mode.state == 'clock12':
 				if hour > 12:
 					hour = hour - 12
 			self.next_hour = hour
 			self.refresh_hands()
 			self.last_min = self.next_min
 			self.last_hour = self.next_hour
+			last_mode = self.mode.state
+			last_transition = self.transition.state
 
 
 	def refresh_hands(self):

@@ -15,7 +15,7 @@ from random import getrandbits
 from device import Device
 from machine import Pin
 from neopixel import NeoPixel
-from system import config, exception_handler
+from system import exception_handler
 import asyncio
 
 #fakeimport matrix_font
@@ -37,7 +37,7 @@ def burst(leds, empty=6):
 
 class MatrixClock:
 	
-	def __init__(self, clock_color=(0,1,1), 
+	def __init__(self, name, clock_color=(0,1,1), 
 			  text_color=(0,0,1), pin=13, num_leds=255,
 			  fade=60):
 		self.leds = NeoPixel(Pin(pin), num_leds)
@@ -46,12 +46,19 @@ class MatrixClock:
 		self.warn_color = (1,0,0)
 		self.text_color = text_color
 		self.fade = fade
-		self.text = Device(config.hostname + "_text", state='')
-		self.onoff = Device(config.hostname, state="ON", dtype="switch")
+		self.text = Device(name + "_text", state='hello world!!')
+		
+		# self.render_text_buffer() uses this to store text for sliding
+		# enough for 30 characters of text (48 * 50 =  2400)
+		self.text_buffer = [(0,0,0)]*2400
+		self.text_buffer_size = 0		
+		
+		self.onoff = Device(name, state="ON", dtype="switch")
 		self.map = map
 		self.width = width
 		self.time_buffer = [32,32,32,32,32]
 		self.digit_buffer = [(0,0,0)]*48
+		
 		self.textindex = -1
 		self.fivesec = False
 		self.lasthour = 0
@@ -74,16 +81,16 @@ class MatrixClock:
 			error("Error reading font file!")
 
 		# default schedule red clock at 55 seconds
-		self.schedule = {'15': {'function': self.display_vertical_text, 'color': self.text_color},
-				'30': {'function': self.display_time, 'color': self.clock_color},
-				'45': {'function': self.display_vertical_text, 'color': self.text_color},
-				'55': {'function': self.display_time, 'color': self.warn_color}
-				}
+		# self.schedule = {'15': {'function': self.display_vertical_text, 'color': self.text_color},
+		# 		'30': {'function': self.display_time, 'color': self.clock_color},
+		# 		'45': {'function': self.display_vertical_text, 'color': self.text_color},
+		# 		'55': {'function': self.display_time, 'color': self.warn_color}
+		# 		}
 		
 		asyncio.create_task(self.display_handler())
 		asyncio.create_task(self.onoff_handler())
-		asyncio.create_task(self.colon_handler())
-		asyncio.create_task(self.seconds_bar_handler())
+		# asyncio.create_task(self.colon_handler())
+		# asyncio.create_task(self.seconds_bar_handler())
 
 	@exception_handler
 	async def onoff_handler(self):
@@ -93,61 +100,54 @@ class MatrixClock:
 				self.setall()
 				self.show_display.clear()
 			else:
-				await self.colon_off.wait() 
-				self.display_time(self.warn_color)
+				#await self.colon_off.wait() 
 				self.show_display.set()
+
+	def render_text_buffer(self):
+		# limit to first 30 characters of text
+		text = f'     {self.text.state[0:30]}     '
+		self.text_buffer_size = len(text) * 48
+		buffer_index = len(text) - 1
+		for digit in text:
+			self.filldigit(self.text_buffer, self.text_color, ord(digit), digit=buffer_index, buffrow=1)
+			buffer_index -= 1
 
 	@exception_handler
 	async def display_handler(self):
-		# use cronlist to step through schedule in order
-		cronlist = [int(y) for y in self.schedule.keys()]
 
-		cronlist.sort()
-
+		self.render_text_buffer()
+		text_index = self.text_buffer_size - 256
+		last_text = self.text.state
+		
 		while True:
+
+			# wait for display to be on
+			await self.show_display.wait()	
+
+			# clear leds and add time
+			self.leds.fill((0,0,0))
+			self.update_time_leds()
+
+			# merge leds with text color
+			for t in range(255):
+				# merge colors
+				lc = self.leds[t]
+				tc = self.text_buffer[t+text_index]
+				self.leds[t] = (tc[0]+lc[0], tc[1]+lc[1], tc[2]+lc[2])
 			
-			# always display the time at the start of the schedule
-			await self.colon_off.wait()
-			self.display_time(self.clock_color)
+			# update leds and wait
+			self.leds.write()
+			await asyncio.sleep_ms(self.fade)
+
+			# shift index by two columns
+			text_index -= 16
+			if text_index < 0:
+				if last_text != self.text.state:
+					self.render_text_buffer()
+					last_text = self.text.state
+				text_index = self.text_buffer_size - 256
+
 			
-			for next_event_second in cronlist:
-
-				# keep flipping clock until time is synced here
-				while not time_synced.is_set():
-					await self.colon_off.wait()
-					self.display_time(self.warn_color)
-					await asyncio.sleep(10)
-					continue
-
-				current_second = offset_time()[5]
-				
-				# skip to the next future scheduled event
-				if next_event_second < current_second:
-					continue
-				
-				# sleep until next event
-				await asyncio.sleep(next_event_second - current_second)
-
-				# wait for colon to be off
-				await self.colon_off.wait()
-				
-				next_function = self.schedule[str(next_event_second)]['function']
-				next_color = self.schedule[str(next_event_second)]['color']
-
-				last_minute = offset_time()[4]
-				next_function(next_color)
-			
-			# sleep until the start of the next minute
-			while offset_time()[4] == last_minute:
-				await asyncio.sleep(1)
-
-
-		if second >= 54 or not time_synced.is_set():
-			debug("ledmatrix:clock: 5 sec warn")
-			color = self.warn_color
-		else:
-			color = self.clock_color
-
 
 	def setall(self, color=(0,0,0)):
 		self.leds.fill(color)
@@ -161,6 +161,7 @@ class MatrixClock:
 				#odd columns
 				leds[digit*self.width *8 + col*16 + 15 - row] = leds[digit*self.width*8 + col*16 + 14 - row]
 
+	# fill digit buffer with single digit or character
 	def filldigit(self, buffer, color, ordnum=32, digit=0, buffrow=0, digitrow=0):
 		#buffrow can be negative, c=col, r=row
 		w = self.width
@@ -172,90 +173,59 @@ class MatrixClock:
 				if not ( achar[c] & 1 << r):
 					buffer[(digit * 8 * w) + self.map[r + buffrow - digitrow + (c*8)]] = (0,0,0)
 
-	def update_seconds_leds(self):
-		second = offset_time()[5]
-		for s in range(30):
-			if int(second /2) >= s:
-				self.leds[seconds_map[s]] = (0,0,5)
-			else:
-				self.leds[seconds_map[s]] = (0,0,0)		
-	@exception_handler
-	async def seconds_bar_handler(self):
-		while True:
-			await self.show_display.wait()
-			self.update_seconds_leds()
-			self.leds.write()
-			await asyncio.sleep(1)
 
-	@exception_handler
-	async def colon_handler(self):
-		info("blink_colon: started")
-		# 114,115,117,118,121,124 to make larger colon
-		while True:
-			await self.show_colon.wait()
+	# @exception_handler
+	# async def colon_handler(self):
+	# 	info("blink_colon: started")
+	# 	# 114,115,117,118,121,124 to make larger colon
+	# 	while True:
+	# 		await self.show_colon.wait()
 			
-			# colon on
-			self.leds[122] = self.colon
-			self.leds[125] = self.colon
-			#self.leds.write()
-			self.colon_off.clear()
-			await asyncio.sleep(1)
+	# 		# colon on
+	# 		self.leds[122] = self.colon
+	# 		self.leds[125] = self.colon
+	# 		#self.leds.write()
+	# 		self.colon_off.clear()
+	# 		await asyncio.sleep(1)
 
-			# colon off
-			self.leds[122] = (0,0,0)
-			self.leds[125] = (0,0,0)
-			#self.leds.write()
-			self.colon_off.set()
-			await asyncio.sleep(1)
+	# 		# colon off
+	# 		self.leds[122] = (0,0,0)
+	# 		self.leds[125] = (0,0,0)
+	# 		#self.leds.write()
+	# 		self.colon_off.set()
+	# 		await asyncio.sleep(1)
 
-	def display_time(self, color):
+	# push current time to leds (no write)
+	def update_time_leds(self):
 
 		if not time_synced.is_set():
 			color = self.warn_color
-
-		self.colon = color
+		else:
+			color = self.clock_color
 
 		ot = offset_time()
 		hour = ot[3]
 		minute = ot[4]
-		debug("display_time: {}:{} {}".format(hour, minute, color) )
+		second = ot[5]
+		#debug("display_time: {}:{} {}".format(hour, minute, color) )
 
 		# update display with current time
 		digit_ordinals = convert_time(hour, minute)
-		self.show_colon.set()
-		self.display(digit_ordinals, color)
-
-	def display(self, digit_ordinals, color, skip_digit=None):
-		
-		if self.show_display.is_set():
-			debug("display: {}".format(digit_ordinals) )
-		else:
-			return
 
 		for d in range(4,-1,-1):
-			#debug('clock: digit {}'.format(d) )
+			# render time digits
+			self.filldigit(self.leds, color, ordnum=digit_ordinals[4-d],digit=d, buffrow = 1, digitrow=0)
 
-			# don't scroll the skipped digit (colon for clock)
-			if skip_digit and d == skip_digit:
-				continue
+		if second % 2 == 0:
+			# colon on
+			self.leds[122] = color
+			self.leds[125] = color
 
-			for row in range(6,-1,-1):
-				self.shiftdown(self.leds, d)
-				self.filldigit(self.leds, color, ordnum=digit_ordinals[4-d],digit=d, buffrow = 1, digitrow=row)
-				
-				self.update_seconds_leds()
-				self.leds.write()
-				sleep_ms(self.fade)
-	
-			# if trans == "random":
-			# 	if digits[4-d] != 32:
-			# 		for i in range(5):
-			# 			self.filldigit(leds, color, ordnum = 48+getrandbits(8) % 9, buffrow = 1, digit=d)
-			# 			leds.write()
-			# 			sleep_ms(fade)
-			# 	self.filldigit(leds, color, ordnum=digits[4-d], buffrow = 1, digit=d)
-			# 	leds.write()
-			#self.time_buffer[4-d] = digits[4-d]
+		else:
+			# colon off
+			self.leds[122] = (0,0,0)
+			self.leds[125] = (0,0,0)
+
 
 	def display_vertical_text(self, color):
 		if self.text.state == "":

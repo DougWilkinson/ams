@@ -1,7 +1,7 @@
 # homeassistant.py
 
 from versions import versions
-versions[__name__] = 16
+versions[__name__] = 17
 # 10: refactored version with Device changes
 # 11: fixed attrs and versions to set last_restart immediately
 # 12: moved timezone update for config and localtime to utc handler
@@ -9,12 +9,13 @@ versions[__name__] = 16
 # 14: fixed missing binary_sensor in check for HA config
 # 15: moved device.configured check to only ha config a device if dtype is right and not already set to True (light_bri and light_rgb)
 # 16: renamed to homeassistant.py and split mqttserver to separate file
+# 17: updated last_restart value when time is synced
 
 import asyncio
 import time
 from machine import RTC
 
-from logger import info, error, debug
+from logger import info, error, debug, strftime
 from system import config, start
 from localtime import offset_time
 
@@ -136,6 +137,11 @@ async def utc_handler():
 						config_changed.set()
 						config.save()
 						debug("timezone updated: {}".format(config.timezone) )
+
+				if 'last_restart' not in versions:
+					versions["last_restart"] = strftime()
+					mqtt.esp.needs_publishing.set()
+
 			except:
 				error('handle_utc: Error processing utc: {}'.format(utc_state))
 

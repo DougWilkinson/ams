@@ -30,7 +30,7 @@ if config.boot_mode == 2:
 if espMAC != config.hostname:
 	try:
 		info("main: loading module: {}".format(config.hostname) )
-		__import__(config.hostname)
+		hostmod = __import__(config.hostname)
 		info("main: host module loaded in {} seconds".format(time() - boot_start_seconds) )	
 	except Exception as e:
 		exception_buffer = StringIO()

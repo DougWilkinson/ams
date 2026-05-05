@@ -1,39 +1,167 @@
-# clock3dnew.py
+# clock3dblit.py
 
 from versions import versions
-versions[__name__] = 20
+versions[__name__] = 17
 # 5: compatible with PC version and includes async scrolling
 # 10: refactored version with new Device and hass changes
 # 11: speed set to 0 where noted
 # 15: complete rewrite to use blit buffers and pre-rendered segments
 # 16: added on/off handling back in
 # 17: added support to turn clock updates on or off to allow other functions (like scale display)
-# 18: used digists3d.py to define digits
-# 19: changed init to require digits parameter (imported elsewhere), scaling removed (default was 0.4)
-# 20: added low_power support
 
 clock_color = 1
 
 import asyncio
 from logger import info, error, debug
 from localtime import offset_time
-from system import start, exception_handler
+from system import config
 from events import low_power
+from framebuf import FrameBuffer, MONO_VLSB
+import time
 
+from math import sin, cos
 from device import Device
 
+# segment order:
+# top, right top, right bottom, bottom, left bottom, left top, middle
+seven_segment_def = [
+	[1,1,1,1,1,1,0], # 0
+	[0,1,1,0,0,0,0], # 1
+	[1,1,0,1,1,0,1], # 2
+	[1,1,1,1,0,0,1], # 3
+	[0,1,1,0,0,1,1], # 4
+	[1,0,1,1,0,1,1], # 5
+	[1,0,1,1,1,1,1], # 6
+	[1,1,1,0,0,0,0], # 7
+	[1,1,1,1,1,1,1], # 8
+	[1,1,1,1,0,1,1], # 9
+	[0,0,0,0,0,0,0,1], # 10 colon
+	[0,0,0,0,0,0,1], # 11 dash
+]
+
+segment_lines = [
+	# top segment
+	[ (-6, -20,0), (6,-20,0), (-6, -19,0), (6,-19,0) ], # top segment
+	# top right segment
+	[ (10, -16,0), (10,-4,0), (11, -16,0), (11,-4,0)], # top right segment
+	# bottom right segment
+	[ (10, 4,0), (10, 16, 0), (11, 4,0), (11, 16, 0)], # bottom right segment
+	# bottom segment
+	[ (6, 20,0), (-6, 20,0), (6, 21,0), (-6, 21,0)], # bottom segment
+	# bottom left segment
+	[ (-10, 16, 0), (-10,4,0), (-9, 16, 0), (-9,4,0)], # bottom left segment
+	# top left segment
+	[ (-10, -4, 0), (-10,-16,0), (-9, -4, 0), (-9,-16,0)], # top left segment
+	# middle segment
+	[ (-6, 0,0), (6,0,0), (-6, 1,0), (6,1,0)], # middle segment
+	# colon
+	[ (0, -12,0), (0,-8,0), (1, -12,0), (1,-8,0),
+  	 (0, 8,0), (0,12,0), (1, 8,0), (1,12,0)]
+]
+
+def rotate_3dpoint(p, angle, axis):
+	"""Rotate a 3D point around given axis."""
+	ret = [0, 0, 0]
+	cosang = cos(angle)
+	sinang = sin(angle)
+	ret[0] += (cosang+(1-cosang)*axis[0]*axis[0])*p[0]
+	ret[0] += ((1-cosang)*axis[0]*axis[1]-axis[2]*sinang)*p[1]
+	ret[0] += ((1-cosang)*axis[0]*axis[2]+axis[1]*sinang)*p[2]
+	ret[1] += ((1-cosang)*axis[0]*axis[1]+axis[2]*sinang)*p[0]
+	ret[1] += (cosang+(1-cosang)*axis[1]*axis[1])*p[1]
+	ret[1] += ((1-cosang)*axis[1]*axis[2]-axis[0]*sinang)*p[2]
+	ret[2] += ((1-cosang)*axis[0]*axis[2]-axis[1]*sinang)*p[0]
+	ret[2] += ((1-cosang)*axis[1]*axis[2]+axis[0]*sinang)*p[1]
+	ret[2] += (cosang+(1-cosang)*axis[2]*axis[2])*p[2]
+	return ret
+
+def rotate_shape(shape, angle):
+	"""Rotate a 3D shape around X axis."""
+	new_shape = []
+	for point in shape:
+		new_shape.append(rotate_3dpoint(point, angle, [1, 0, 0]))
+	return new_shape
+
+# Generate a shape (list of points) for a digit to scale
+def generate_shape(digit, scale) -> list:
+	shape = []
+
+	segments = seven_segment_def[digit]
+	# iterate for each segment in digit
+	for segment in range(len(segments)):
+		if segments[segment] == 1:
+			for coords in segment_lines[segment]:
+				shape.append( ( coords[0] * scale, coords[1] * scale, coords[2] * scale ) )
+
+	return shape
+
+# given a shape and angle return a framebuffer object
+def render_blit(shape, width, height, angle, color):
+	
+	# rotate the shape object to be used for rendering to framebuffer
+	# angle is absolute from 0
+	rotated_shape = rotate_shape(shape, angle)
+
+	# calculate origin as coordinates are from center
+	origin_x = width / 2
+	origin_y = height / 2
+
+	frame_buffer = FrameBuffer(bytearray(width * height), width, height, MONO_VLSB)
+
+	# print(f'shape: {shape}')
+	# coordinates are in pairs and we do not wrap back to start
+	for i in range(0, len(rotated_shape)-1, 2):
+		a = rotated_shape[i]
+		b = rotated_shape[(i + 1) ]
+		ax, ay = (a[0] ) + (a[2] * 0.3 ) + origin_x, (a[1] ) + (a[2] * 0.3 ) + origin_y
+		bx, by = (b[0] ) + (b[2] * 0.3 ) + origin_x, (b[1] ) + (b[2] * 0.3 ) + origin_y
+		frame_buffer.line( int(ax), int(ay), int(bx), int(by), color)
+
+	return frame_buffer
+
+# Hold all angles of a digit and methods for rendering
+# create a blit buffer for each angle?
+# 7 segment display is 21 pixels wide by 32 pixels high (scale = 1)
+# 
+class Digit:
+
+	def __init__(self, value, scale=0.5):
+		
+		self.scale = scale
+		self.width = int(24 * scale)
+		self.height = int(44 * scale)
+
+		# Start with the from_value shape at angle = 0
+		shape = generate_shape(value, scale)
+
+		# use when transitioning from this value
+		self.from_blits = []
+		angle = 0
+
+		for i in range(5):
+
+			self.from_blits.append(render_blit(shape, self.width, self.height, angle, 1 ) )
+			angle += 0.32
+
+		angle = -1
+
+		# use when transitioning to this value
+		self.to_blits = []
+		for i in range(5):		
+
+			self.to_blits.append(render_blit(shape, self.width, self.height, angle, 1 ) )
+			angle += 0.2
+
 class Clock:
-	def __init__(self, name, display, digits, x=0, y=21):
+	def __init__(self, name, display, x=0, y=21, scale=0.4):
 
-		info(f"clock3d: init {name} at {x}, {y}")
+		info(f"clock3d: init {name} at {x}, {y} - scale: {scale}")
 
+		self.scale = scale
 		self.x = x
 		self.y = y
 
 		self.display = display
-
-		# digits provided by calling function
-		self.digits = digits
 
 		self.onoff = Device(name, state="ON", dtype="switch")
 
@@ -48,6 +176,12 @@ class Clock:
 		# when set, clock has been stopped
 		self.clock_stopped = asyncio.Event()
 		self.clock_stopped.clear()
+
+		# generate all digits
+					
+		self.digits = []
+		for n in range(len(seven_segment_def)):
+			self.digits.append( Digit(n, scale) )
 
 		self.last_time = [0, 0, 10, 0, 0, 10, 0, 0]
 		self.current_time = [0, 0, 10, 0, 0, 10, 0, 0]
@@ -103,15 +237,14 @@ class Clock:
 		info("clock3d: digit: 7 at x={}".format(x) )
 		asyncio.create_task(self.maintain_digit( 7, x, y, self.seconds_done, self.every_second ) )
 
-		start(self.maintain_time)
-		start(self.update_display )
-		start(self.onoff_handler)
+		asyncio.create_task(self.maintain_time())
+		asyncio.create_task(self.update_display() )
+		asyncio.create_task(self.onoff_handler())
 	
 	def show_colons(self):
 		self.display.blit(self.digits[10].from_blits[0], 33, 21)
 		self.display.blit(self.digits[10].from_blits[0], 81, 21)
 
-	@exception_handler
 	async def onoff_handler(self):
 		async for _ , ev in self.onoff.q:
 			debug("onoff: {}".format(ev) )
@@ -120,7 +253,6 @@ class Clock:
 			else:
 				self.display.display_on()
 
-	@exception_handler
 	async def maintain_digit(self, place, x, y, next_trigger, wait_until, done_event=None):
 		# set the digit to the current value when initialized
 		info("clock3d: maintain_digit: place: {}".format(place) )
@@ -132,40 +264,31 @@ class Clock:
 			await wait_until.wait()
 			wait_until.clear()
 
-			if low_power.is_set():
-				
-				current = self.current_time[place]
-				self.display.blit(self.digits[current].from_blits[0], x, y)
+			# spin digit
+			for blit in self.digits[last].from_blits:
+				self.display.blit(blit, x, y)
 				self.refresh.set()
-				next_trigger.set()
+				await asyncio.sleep(0)
+				#self.display.show()
+				#time.sleep(0.01)
+			next_trigger.set()
 
-			else:
-				
-				# spin digit
-				for blit in self.digits[last].from_blits:
-					self.display.blit(blit, x, y)
-					self.refresh.set()
-					await asyncio.sleep(0)
-					#self.display.show()
-					#time.sleep(0.01)
-				next_trigger.set()
-
-				# set the digit to the current value when initialized
-				current = self.current_time[place]
-				# spin digit
-				for blit in self.digits[current].to_blits:
-					self.display.blit(blit, x, y)
-					self.refresh.set()
-					await asyncio.sleep(0)
-					# self.display.show()
-					# time.sleep(0.01)
-				
+			# set the digit to the current value when initialized
+			current = self.current_time[place]
+			# spin digit
+			for blit in self.digits[current].to_blits:
+				self.display.blit(blit, x, y)
+				self.refresh.set()
+				await asyncio.sleep(0)
+				# self.display.show()
+				# time.sleep(0.01)
+			
 			last = current
 
 			if done_event:
 				done_event.set()
 
-	@exception_handler
+
 	async def maintain_time(self):
 		info("clock3d: maintain_time: started")
 		last_second = -1
@@ -219,7 +342,6 @@ class Clock:
 				self.cascade_trigger.set()
 				self.cascade_done.clear()
 
-	@exception_handler
 	async def update_display(self):
 		info("started: updating display")
 		while True:

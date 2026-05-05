@@ -1,10 +1,11 @@
 # profiles.py
 
 from versions import versions
-versions[__name__] = 11
+versions[__name__] = 12
 # 1: split from settings file
 # 10: refactored
 # 11: changed load/save for profiles
+# 12: added config_valid flag
 
 from device import Device
 import json
@@ -17,7 +18,7 @@ from time import localtime, time, sleep
 
 from factory_defaults import factory_defaults
 import re
-from events import config_changed
+from events import config_changed, config_valid
 from logger import info, error
 
 espMAC = hexlify(unique_id()).decode()
@@ -166,6 +167,7 @@ class Profile:
 			if "modules_" in k:
 				self.modules.append((k.split("_")[1]) )
 
+		config_valid.set()
 		#asyncio.create_task(self.update())
 
 	# merge from dict to persistent settings

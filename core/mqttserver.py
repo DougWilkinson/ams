@@ -4,18 +4,20 @@
 # split off from hass.py
 
 from versions import versions
-versions[__name__] = 11
+versions[__name__] = 13
 # 10: split off from hass.py and turned into a class
 # 11: fixed esp state - trigger update after reconnect to mqttserver
+# 12: moved last_restart to homeassistant for update after time is synced
+# 13: added wdt start option via mqtt
 
 import asyncio
 import time
 
 from logger import info, error, debug
 from profiles import espMAC
-from system import config, start
-from logger import strftime
+from system import config, start, exception_handler
 import socket
+from machine import WDT, reset_cause
 
 from events import wifi_connected, mqtt_connected, mqtt_error, subscribe_all, config_changed
 
@@ -26,8 +28,6 @@ from msgqueue import MsgQueue
 from device import Device, device_list
 from logger import strftime
 
-versions["last_restart"] = strftime()
-
 publish_queue = MsgQueue(50)
 
 class MQTT:
@@ -36,6 +36,7 @@ class MQTT:
 		self.client = None
 		self.esp = Device('esp/{}'.format(espMAC), "online", needs_publishing=True)
 		
+		versions['reset_cause'] = reset_cause()
 		self.esp.attrs = versions
 
 		# place for all subscribed topics and related device objects
@@ -46,6 +47,7 @@ class MQTT:
 		start(self.check_msg_handler)
 		start(self.publish_handler)
 		start(self.subscribe_all_handler)
+		start(self.esp_device_handler)
 
 		info("mqtt: setup complete" )
 
@@ -64,7 +66,8 @@ class MQTT:
 			error('mqtt: subscribe failed: {}'.format(topic) )
 			mqtt_error.set()
 
-# Subscribes and resubs when mqtt connection is lost
+	# Subscribes and resubs when mqtt connection is lost
+	@exception_handler
 	async def subscribe_all_handler(self):
 
 		info("mqtt: subscribe_all_handler running")
@@ -95,6 +98,7 @@ class MQTT:
 	def publish(self, topic, msg):
 		publish_queue.put((topic, msg))
 
+	@exception_handler
 	async def publish_handler(self):
 		global publish_queue
 
@@ -119,6 +123,7 @@ class MQTT:
 					await asyncio.sleep(1)
 
 	# ping mqtt every 30 seconds
+	@exception_handler
 	async def ping_handler(self):
 		info("mqtt: ping_handler running")
 		while True:
@@ -132,6 +137,7 @@ class MQTT:
 				mqtt_error.set()
 
 	# Check for incoming MQTT messages (calls callback if received)
+	@exception_handler
 	async def check_msg_handler(self):
 		info("mqtt: check_msg_handler running")
 		while True:
@@ -174,10 +180,23 @@ class MQTT:
 		debug('mqtt:check_reachability: server {} appears online'.format(mqtt_server))
 		return True
 
-	async def esp_state_handler(self):
-		for _, ev in self.esp_state.q:
+	async def wdt_start(self):
+		error("mqtt: wdt_start watchdog active!")
+		wdt = WDT(timeout=30000)
+		while True:
+			await asyncio.sleep(10)
+			wdt.feed()
+
+	@exception_handler
+	async def esp_device_handler(self):
+		async for _, ev in self.esp.q:
 			await wifi_connected.wait()
 			await mqtt_connected.wait()
+			
+			if ev == 'wdt':
+				asyncio.create_task(self.wdt_start())
+				continue
+
 			if ev == 'shutdown':
 				self.client.set_last_will('hass/sensor/esp/{}/state'.format(espMAC), 'shutdown', retain=True)
 			else:
@@ -205,6 +224,7 @@ class MQTT:
 			# 	publish_queue.put(gen_topic(device,"/state"), device.state.lower() if device.set_lower else device.state)
 
 	# Maintain MQTTclient connection, reconnect if flagged as bad
+	@exception_handler
 	async def mqtt_connection_handler(self):
 		info("mqtt: mqtt_connection_handler running")
 

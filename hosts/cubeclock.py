@@ -18,6 +18,7 @@ from logger import info, debug, error
 from touchpin import TouchPin
 from sh1106 import SH1106_I2C
 from clock3dblit import Clock
+from digits3d import generate_digits
 
 from device import Device
 from menu import Menu
@@ -33,7 +34,16 @@ sh_display = SH1106_I2C(128, 64, sh1106_i2c )
 # sh_clock = BlitClock("sh1106", width=64, height=64, display=sh_display, bitmap=MONO_VLSB, hand=2)
 
 # sh_clock = Clock3D("cubeclock", display=sh_display, scale=0.44)
-sh_clock = Clock("cubeclock", sh_display)
+
+# before digits below
+# sh_clock = Clock("cubeclock", sh_display)
+
+digits = generate_digits(scale=0.4)
+
+# y=21 for sh1106 centered with space above/below for small text
+digit_y = 21
+sh_clock = Clock("coffee_clock", sh_display, digits, x=0, y=digit_y)
+
 
 forecast = Device("hass/weather/forecast", "", publish=False, dtype="mqtt" )
 

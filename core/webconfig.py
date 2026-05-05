@@ -1,12 +1,14 @@
 # webconfig.py
 
 from versions import versions
-versions[__name__] = 15
+versions[__name__] = 17
 # 2: supported profiles and logger split
 # 12: changed logger to non-class
 # 13: log_level added to tail_console (future url support log level filtering)
 # 14: modified tail_console to handle exceptions better
 # 15: added exception_history to tail_console
+# 16: added tail_console exception handling
+# 17: added check for line length in tail_console - truncate if too long
 
 import os
 import gc
@@ -20,6 +22,7 @@ import logger
 from events import config_changed
 import machine
 import asyncio
+from io import StringIO
 
 import hashlib
 import binascii
@@ -690,13 +693,19 @@ label {{ display:block; margin-top: 10px; }}
 			# Plain text output
 			return microdot.Response(hexval, headers={"Content-Type": "text/plain"})
 
+		# Add memory error handling? for tail_console: Exception: memory allocation failed, allocating 131072 bytes
+		# air-s3 was getting this error and not doing a tail_console at the time?
+		
 		@self.route('/tail_console')
 		@with_sse
 		async def tail_console(request, sse):
+			
 			if not self._require_auth(request):
 				return microdot.Response('Unauthorized', status_code=401)
 
+			error_count = 0
 			client_connected = True
+			logger.debug(f"tail_console opened: request: {request}, sse: {sse}")
 			
 			# send exceptions to the client
 			for e in logger.exception_history:
@@ -707,15 +716,30 @@ label {{ display:block; margin-top: 10px; }}
 			while client_connected:
 				try:
 					async for log_level, line in logger.console_history:
+						if len(line) > 500:
+							line  = f"({len(line)}) !> {line[0:80]} <!"
 						await sse.send( line.strip() )
 						await sse.send( "" )
 
 				except asyncio.CancelledError:
-					print("tail_console: client disconnected")
+					logger.error(f"tail_console: asyncio.CancelledError for sse: {sse}")
 					client_connected = False
 
 				except Exception as e:
-					print("tail_console: Exception: {}".format(e))
+					exception_buffer = StringIO()
+					sys.print_exception(e, exception_buffer)
+					logger._exception(exception_buffer.getvalue(), func_name='tail_console', count=error_count)
+					error_count += 1
+					
+		@self.route('/cmd/<cmd>')
+		async def cmd(request, cmd):
+			# if not self._require_auth(request):
+			# 	return microdot.Response('Unauthorized', status_code=401)
+
+			try:
+				return microdot.Response(str( eval(cmd) ), headers={"Content-Type": "text/plain"})
+			except Exception as e:
+				return microdot.Response(str(e), headers={"Content-Type": "text/plain"})
 
 
 	def _login_form(self):

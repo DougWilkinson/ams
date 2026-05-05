@@ -2,17 +2,15 @@
 
 # radar 24GHz sensor (Seeed XIAO)
 from versions import versions
-versions[__name__] = 11
+versions[__name__] = 10
 # 10: support for webconfig (no ha_setup)
-# 11: starting over with fresh readings
 
 from machine import UART, Pin
 from time import time, sleep_ms
 from logger import debug, info, error
 import asyncio
-#from neopixel import NeoPixel
+from neopixel import NeoPixel
 
-from system import start, exception_handler
 from device import Device
 import struct
 
@@ -51,20 +49,19 @@ class Presence:
 		self.rx = rx
 		# self.led = NeoPixel(Pin(5), 1)
 		
-		self.buffer = bytearray(512)
-
 		self.uart_init()
 
+		self.buffer = bytearray(512)
 		self.last_reading = None
 
 		self.motion = Device("{}_motion".format(name), "OFF", dtype="binary_sensor" )
-		# self.m_distance = Device("{}_motion_distance".format(name), state="0", units="cm" )
+		self.m_distance = Device("{}_motion_distance".format(name), state="0", units="cm" )
 		
 		self.presence = Device("{}_presence".format(name), "OFF", dtype="binary_sensor" )
-		# self.p_distance = Device("{}_presence_distance".format(name), state="0", units="cm" )
-		# self.energy = Device("{}_presence_energy".format(name), state="0", units="mJ" )
+		self.p_distance = Device("{}_presence_distance".format(name), state="0", units="cm" )
+		self.energy = Device("{}_presence_energy".format(name), state="0", units="mJ" )
 
-		# self.det_distance = Device("{}_detector_distance".format(name), state="0", units="cm" )
+		self.det_distance = Device("{}_detector_distance".format(name), state="0", units="cm" )
 
 		self.ack = False
 		
@@ -81,7 +78,7 @@ class Presence:
 		self.get_resolution()
 		self.read_params()
 
-		asyncio.create_task(self.hlk_handler())
+		asyncio.create_task(self.read_sensor())
 		asyncio.create_task(self.update_door(self.m_door))
 		asyncio.create_task(self.update_door(self.p_door))
 
@@ -101,70 +98,101 @@ class Presence:
 			# except ValueError:
 			# error("invalid door value: {}".format(msg))
 
-
 	def get_status(self):
-		self.buffer += self.human.read(self.human.any())
+		status = self.human.read(self.human.any())
+		self.buffer += status
 
 		if FRAME_START not in self.buffer or FRAME_END not in self.buffer:
-			return None
-
-		#print("ds: {}".format(buffer) )
+			return False
+		#print("ds: {}".format(self.buffer) )
 		start_index = self.buffer.index(FRAME_START) + 8
 		end_index = self.buffer.index(FRAME_END)
-	
+		
 		# remove bad data from buffer (min length check too)
 		if start_index > end_index:
 			# Remove garbage
 			self.buffer = self.buffer[end_index+4:]
-			return None
-	
+			return False
+		
 		# update device values
-		reading = self.buffer[start_index:end_index]
+		self.last_reading = self.buffer[start_index:end_index]
 		self.buffer = self.buffer[-4 - end_index:]
-		if len(reading) < 11:
-			error("bad status length: {}".format(len(reading) ) )
-			return None
+		if len(self.last_reading) < 11:
+			error("bad status length: {}".format(len(self.last_reading) ) )
+			return False
 
-		return reading
+		# update values
+		self.status, self.m_dist, self.m_energy, self.p_dist, self.p_energy, self.det_dist = struct.unpack('<BhBhBh', self.last_reading)
+		
+		if self.m_dist < 0 or self.m_dist > 500:
+			return False
+		if self.p_dist < 0 or self.p_dist > 500:
+			return False
+		
+		if self.p_energy < 0 or self.p_energy > 500:
+			return False
+		
+		if self.det_dist < 0 or self.det_dist > 500:
+			return False
+		
+		return True
 
-	@exception_handler
-	async def hlk_handler(self):
-		info("hlk_handler: running")
-		last_motion = time()
-		last_presence = time()
-
+	async def read_sensor(self):
+		last_status = -1
 		while True:
-			await asyncio.sleep(.5)
-
-			# get status and wait until a reading is returned
-			reading = self.get_status()
-			if reading is None:
+			self.human.read()
+			await asyncio.sleep(3)
+			if not self.get_status():
 				continue
-
-			# update values
-			status, m_dist, m_energy, p_dist, p_energy, det_dist = struct.unpack('<BhBhBh', reading)
-
-			# check for motion
-			if status & 1 and m_dist > 0 and m_energy > 50: 
-				if self.motion.state == "OFF":
-					debug(f"hlk_handler: motion: dist: {m_dist}, energy: {m_energy}")
-					self.motion.set_state("ON")
-				last_motion = time()
-			else:
-				# if more than 30 seconds since last motion, turn off
-				if self.motion.state == "ON" and time() - last_motion > 30:
-					self.motion.set_state("OFF")
 			
-			# check for presence
-			if status & 2 and p_dist > 0 and p_energy > 90:
-				if self.presence.state == "OFF":
-					debug(f"hlk_handler: presence: dist: {p_dist}, energy: {p_energy}" )
+			if last_status != 0 and self.status == 0:
+				# update no presence or motion
+				self.motion.set_state("OFF")
+				self.presence.set_state("OFF")
+				self.m_distance.set_state(0)
+				self.p_distance.set_state(0)
+				# self.led[0] = ( 0, 0, 20 )
+				# self.led.write()
+
+			# if self.status & 1:
+			# 	# update motion
+			# 	info("motion: new: {}, last: {}".format(self.m_dist, self.m_distance.state) )
+			# 	if abs(self.m_dist - int(self.m_distance.state)) > 5:
+			# 		self.m_distance.set_state(self.m_dist)
+			# 		info("Motion distance: {} cm ({})".format(self.m_dist, self.m_energy) )
+			# 		self.led[2] = ( 0, 0, 0 )
+			# 		use_dist = min(self.m_dist, 300)
+			# 		b = 151 - int((use_dist/300)*150)
+			# 		self.led[1] = ( b, 0, 0 )
+			# 	if int(self.m_distance.state) > 0 and self.motion.state == "OFF":
+			# 		self.motion.set_state("ON")
+
+			if self.status & 2 and self.p_energy > 65 and self.p_dist > 35:
+				# update stationary
+				info("presence: new: {}, last: {}, energy: {} det_dist {}".format(self.p_dist, self.p_distance.state, self.p_energy, self.det_dist) )
+				if abs(self.p_dist - int(self.p_distance.state)) > 5:
+					self.p_distance.set_state(self.p_dist)
+					info("Stationary distance: {} cm ({})".format(self.p_dist, self.p_energy) )
+					#self.led[2] = ( 0, 0, 0 )
+					use_dist = min(self.p_dist, 300)
+					b = 151 - int((use_dist/300)*150)
+					if b < 2:
+						b = 2
+					# self.led[0] = ( 0, b, 0 )
+					# self.led.write()
+				
+					self.energy.set_state(self.p_energy)
+					self.det_distance.set_state(self.det_dist)
+				
+				if int(self.p_distance.state) > 0 and self.presence.state == "OFF":
 					self.presence.set_state("ON")
-				last_presence = time()
-			else:
-				# if more than 30 seconds since last presence, turn off
-				if self.presence.state == "ON" and time() - last_presence > 30:
-					self.presence.set_state("OFF")
+
+			# if self.status >:
+			# 	error("s: {}, md: {}, me: {}, sd: {}, se: {}, dd: {}".format(self.status, self.m_dist, self.m_energy, self.p_dist, self.p_energy, self.det_dist) )
+			# elif self.status > 0:
+			# 	info("s: {}, md: {}, me: {}, sd: {}, se: {}, dd: {}".format(self.status, self.m_dist, self.m_energy, self.p_dist, self.p_energy, self.det_dist) )
+
+			last_status = self.status
 
 	# used only to send commands (not general status processing)
 	def send_wait(self, command):

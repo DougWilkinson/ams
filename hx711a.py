@@ -1,11 +1,12 @@
-# hx711.py
+# hx711a.py
 
 from versions import versions
-versions[__name__] = 9
+versions[__name__] = 10
 # 6: added rate_ms (default 300) should be able to take 10 reads per second at lowest rate
 # 7: added min/max average and tare
 # 8: added start and exception handler
 # 9: removed rounding from average values
+# 10: changed average and how values are updated to replace near ones with averages
 
 from time import sleep_ms
 from machine import Pin
@@ -47,7 +48,6 @@ class HX711():
 		self.pdsckPin = Pin(hxclock_pin, Pin.OUT, value=0)
 		# self.hx2g = 0.8075   # 0.8075
 		self.values = [0, ] * samples
-		self.last_average = 0
 		self.tare = 0
 		self.powerup()
 		start(self.update_samples)
@@ -81,70 +81,47 @@ class HX711():
 			#debug(f"hx711: after discard: {newcopy}")
 			current_average = sum(newcopy)/ len(newcopy)
 			
-		# if they are the same sign, use this
-		diff_avg = abs(self.last_average - current_average)
-
-		# check for different signs to get total difference
-		if current_average < 0 and self.last_average > 0:
-			diff_avg = self.last_average - current_average
-		
-		if current_average > 0 and self.last_average < 0:
-			diff_avg = current_average - self.last_average
-		
-		#debug(f"hx711: self.last_average: {self.last_average}, current_average: {current_average}, diff_avg: {diff_avg}")
-
-		if diff_avg > self.diff:
-			self.last_average = current_average
-
-		return self.last_average - self.tare
-
+		return current_average - self.tare
 	
 	def set_tare(self):
 		self.tare = 0
-		new_average = self.average()
-		self.last_average = new_average
-		self.tare = new_average
+		self.tare = self.average()
 
 	# Update samples and low/high flags
 	@exception_handler
 	async def update_samples(self):
 		values_length = len(self.values)
+		last_raw = self.raw_read()
+
 		while True:
-			# while not self.dataPin.value():
-			# 	print(self.dataPin.value())
-			# 	asyncio.sleep_ms(1)
-			# sleep_us(10)
 			raw = self.raw_read()
 			#debug(f"hx711: raw: {raw}")
+
 			if self.min == 0 and raw > -self.diff and raw < 0:
 				raw = 0
+
+			# if they are the same sign, delta_raw is abs difference
+			delta_raw = abs(last_raw - raw)
+
+			# check for different signs to get difference
+			if raw < 0 and last_raw > 0:
+				delta_raw = last_raw + raw
+			
+			if raw > 0 and last_raw < 0:
+				delta_raw = raw + last_raw
+		
+			# If new value is near last value, replace with current average instead
+			if delta_raw < self.diff:
+				raw = self.average() + self.tare
+
 			if raw >= self.min and raw < self.max:
 				self.raw_read_count += 1
 				self.values.append(raw)
 				self.values.pop(0)
-				# self.last_average = round( sum(self.values)/ len(self.values), 1 )					
+
+			last_raw = raw
 			await asyncio.sleep_ms(self.rate_ms)
 
-	# def raw_read(self):
-	# 	# while not self.isready():
-	# 	# 	pass
-	# 	# sleep_us(10)
-	# 	my = 0
-	# 	# d = disable_irq()
-	# 	for idx in range(24):
-	# 		toggle(self.pdsckPin)
-	# 		data = self.dataPin.value()
-	# 		if not idx:
-	# 			neg = data
-	# 		else:
-	# 			my = ( my << 1) | data
-	# 	# one read = gain of 128
-	# 	toggle(self.pdsckPin)
-	# 	# enable_irq(d)
-	# 	if neg: my = my - (1<<23)
-	# 	return my/self.k + self.offset
-	
-	
 	def raw_read(self):
 		# while not self.isready():
 		# 	pass

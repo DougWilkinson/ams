@@ -2,21 +2,24 @@
 # For esp32-s3 mini and sh1106 in red case
 
 from versions import versions
-versions[__name__] = 13
+versions[__name__] = 15
 # 10: converted to new standard
 # 11: added on/off handling back in
 # 12: added vl53l0x support
 # 13: changed vlx53l0x to use SoftI2C
+# 14: added @exception_handler
+# 15: changed to use generate_digits and separated clock and digits
 
 from vl53l0x import VL53L0X
 #from machine import I2C, Pin
 
 from machine import Pin, SoftI2C
 
-from system import start
+from system import start, exception_handler
 from logger import info
 from sh1106 import SH1106_I2C
 from clock3dblit import Clock
+from digits3d import generate_digits
 
 from device import Device
 
@@ -27,7 +30,14 @@ sh1106_i2c = SoftI2C(scl=Pin(12),sda=Pin(13))
 sh_display = SH1106_I2C(128, 64, sh1106_i2c )
 
 #sh_clock = Clock3D("cubeclock", display=sh_display, scale=0.44)
-sh_clock = Clock("mini3d", sh_display)
+#sh_clock = Clock("mini3d", sh_display, )
+
+# New style digits
+digits = generate_digits(scale=0.4)
+
+# y=21 for sh1106 centered with space above/below for small text
+digit_y = 21
+sh_clock = Clock("mini3d", sh_display, digits, x=0, y=digit_y)
 
 forecast = Device("hass/weather/forecast", "", publish=False, dtype="mqtt" )
 forecast.set_state("------------")
@@ -55,6 +65,7 @@ vlx_sensor = VL53L0X("laptop", vlx_i2c, poll_seconds=1, min=1, max=200)
 
 vlx_device = Device("laptop_open", "OFF", dtype="binary_sensor" )
 
+@exception_handler
 async def update_vlx():
 	info("update_vlx: running")
 	

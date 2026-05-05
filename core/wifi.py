@@ -1,9 +1,11 @@
 # wifi.py
 
 from versions import versions
-versions[__name__] = 11
+versions[__name__] = 12
 # 10: refactored
 # 11: added global versions to fix info not being added
+# 12: enabled ap_mode on suspect wifi config, added exception handling to wifi_connect,
+#     don't wait for config change, keep checking for wifi connection, reconnect fully every minute
 
 from network import WLAN, STA_IF, AP_IF, STAT_NO_AP_FOUND, STAT_WRONG_PASSWORD, STAT_GOT_IP, STAT_CONNECTING
 from time import sleep, sleep_ms, ticks_ms
@@ -13,15 +15,20 @@ from blinkled import on_led, off_led, wifi_status
 from events import wifi_connected, config_changed, low_power
 import socket
 
-"""
-STAT_BEACON_TIMEOUT             STAT_CONNECTING
-STAT_CONNECT_FAIL               STAT_GOT_IP
-STAT_HANDSHAKE_TIMEOUT          STAT_IDLE       STAT_NO_AP_FOUND
-STAT_NO_AP_FOUND_IN_AUTHMODE_THRESHOLD
-STAT_NO_AP_FOUND_IN_RSSI_THRESHOLD
-STAT_NO_AP_FOUND_W_COMPATIBLE_SECURITY
-STAT_WRONG_PASSWORD
-"""
+wifi_codes = {
+		1000: "STAT_IDLE",
+		1001: "STAT_CONNECTING",
+		1010: "STAT_GOT_IP",
+		200: "STAT_BEACON_TIMEOUT",
+		201: "STAT_NO_AP_FOUND",
+		202: "STAT_WRONG_PASSWORD",
+		203: "STAT_CONNECT_FAIL",
+		204: "STAT_HANDSHAKE_TIMEOUT",
+		210: "STAT_NO_AP_FOUND_W_COMPATIBLE_SECURITY",
+		211: "STAT_NO_AP_FOUND_IN_AUTHMODE_THRESHOLD",
+		212: "STAT_NO_AP_FOUND_IN_RSSI_THRESHOLD"
+		}
+
 import asyncio
 
 # disable AP mode to start (only enable if can't connect as client)
@@ -46,16 +53,19 @@ def wifi_connect():
 		# if wifi name is same and already connected, don't reconnect
 		if config.wifi_ssid == essid and wlan.isconnected() and wlan.config('dhcp_hostname') == config.hostname:
 			return
-		wlan.active(True)
-		sleep(0.5)
-		wlan.disconnect()
-		wlan.config(dhcp_hostname=config.hostname)
+		try:
+			wlan.active(True)
+			sleep(0.5)
+			wlan.disconnect()
+			wlan.config(dhcp_hostname=config.hostname)
 
-		# Connect to configured network with creds only if something changed or initial boot
-		if config.wifi_ssid != essid or config_changed.is_set():
-			wlan.connect(config.wifi_ssid, config.wifi_secret)
-		else:
-			wlan.connect()
+			# Connect to configured network with creds only if something changed or initial boot
+			if config.wifi_ssid != essid or config_changed.is_set():
+				wlan.connect(config.wifi_ssid, config.wifi_secret)
+			else:
+				wlan.connect()
+		except:
+			reboot(10)
 
 wifi_connect()
 
@@ -80,12 +90,16 @@ async def wifi():
 	global wifi_connected
 	wifi_connected.clear()
 
-	# If wifi was configured, wait if still trying to connect
+	# If wifi was configured, wait for 30 seconds (only at startup) before retrying a full connect
+
 	retries = 0
+	
+	error("wifi: handler started")
+
 	while retries < 10 and wlan.status() == STAT_CONNECTING:
 		retries += 1
-		info("wifi: trying to connect to {} ({}) ...".format(config.wifi_ssid, retries))
-		await asyncio.sleep(1)
+		debug("wifi: waiting for {} ({}) ...".format(config.wifi_ssid, retries))
+		await asyncio.sleep(3)
 
 	retries = 0
 	while True:
@@ -109,6 +123,7 @@ async def wifi():
 				
 				if config.hostname != wlan.config('dhcp_hostname'):
 					error("wifi: changing hostname from {} to {}".format(wlan.config('dhcp_hostname'), config.hostname))
+					retries = 0
 					wlan.disconnect()
 
 				await asyncio.sleep(1)
@@ -119,28 +134,31 @@ async def wifi():
 			if wlan.isconnected() and wlan.status() == STAT_GOT_IP:
 				continue
 			
-			error("wifi: status: not connected!" )
+			error(f"wifi: not connected: {wifi_codes[wlan.status()]}" )
 			wifi_connected.clear()
 
 			# Handle a bad password or missing wifi name or AP not found since power on
 			# by waiting for a config change (need need to keep trying to connect)
 			# if you power on and AP is not found, the device will try to keep reconnecting
 
-			if suspect_wifi_config():
+			# if suspect_wifi_config():
 
-				config_changed.clear()
-				error("wifi: suspected bad wifi config, waiting for config change")
-				await config_changed.wait()
+			# 	config_changed.clear()
+			# 	error("wifi: suspected bad wifi config, waiting for config change")
+			# 	await config_changed.wait()
 				
-			# Try 100 times or about 5 minutes before rebooting
-			if retries > 100:
+			# Try 150 times or about 5 minutes before rebooting
+			if retries > 150:
 				error("wifi: not connecting - hard reset")
 				reboot(0)
 			else:
 				info("wifi: connecting to {} ({}) ...".format(config.wifi_ssid, retries))
 				retries += 1
 
-			wifi_connect()
+			# reconnect fully every minute
+			if retries % 30 == 0:
+				wifi_connect()
+			
 			await asyncio.sleep(2)
 
 		# except Exception as e:
@@ -198,7 +216,7 @@ async def ap_wifi_handler():
 		
 		await asyncio.sleep(5)
 
-#start(ap_wifi_handler)
+start(ap_wifi_handler)
 
 # start dns server for captive portal and wait for client wifi to connect
 # dns needs AP mode enabled, so this can't start until ap_mode is enabled

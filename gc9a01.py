@@ -85,6 +85,7 @@ class GC9A01(framebuf.FrameBuffer):
         self._spi_init = init_spi
         self._gscale = False  # Interpret buffer as index into color LUT
         self.mode = framebuf.GS4_HMSB
+        self.color_mode = framebuf.GS4_HMSB
         gc.collect()
         buf = bytearray(height * width // 2)  # Frame buffer
         self.mvb = memoryview(buf)

@@ -1,9 +1,10 @@
 # backdoor.py
 
 from versions import versions
-versions[__name__] = 10
+versions[__name__] = 11
 # 4: replaced hardware to s3mini
 # 10: converted several modules and using webconfig (no ha_setup)
+# 11: added matrixslidingclock
 
 from logger import info
 
@@ -50,3 +51,7 @@ led = LedMotion("backdoor_overhead", leds, trigger=door, off_delay=300)
 
 # # old backdoor config
 # led_lights = LedMotion("backdoor", trigger=door, led_pin=8, num_leds=70, on_seconds=300)
+
+from matrixrandomclock import MatrixClock
+
+display = MatrixClock("trinity", pin=7, num_leds=255, clock_color=(0,2,2), text_color=(0,0,1), cycle_delay_ms=2000)

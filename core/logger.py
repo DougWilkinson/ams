@@ -1,7 +1,7 @@
 # logger.py
 
 from versions import versions
-versions[__name__] = 15
+versions[__name__] = 17
 # 1: started to separate console and logging from settings
 # 10: refactored
 # 11: revised color support and cleaned up end=end
@@ -9,6 +9,8 @@ versions[__name__] = 15
 # 13: added separate buffer handling for info, error and debug
 # 14: combined logging to single buffer with key as log level, value as line
 # 15: added exception_history
+# 16: fixed exception logging to console needs lines split and fed separately
+# 17: limited exception_buffer to settings["buffer_size"]
 
 from localtime import offset_time
 from network import WLAN
@@ -57,4 +59,7 @@ def _exception(e, func_name="", count=0):
 	# print_exception(e, exception_buffer)
 	msg = f"exception({count}): {func_name}: {e}"
 	exception_history.append(f"{strftime()}: {msg}")
-	_log_msg(msg, log_level=0)
+	if len(exception_history) > settings["buffer_size"]:
+		exception_history.pop(0)
+	for each_line in msg.split("\n"):
+		_log_msg(each_line, log_level=0)
